@@ -1,0 +1,2 @@
+# Source files built with another compiler than tools/configure.py MWCC_VERSION
+# <source path> <mwccarm version> [extra flags]

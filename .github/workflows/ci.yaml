@@ -1,0 +1,37 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+jobs:
+  lint:
+    name: Linting/style checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          check-latest: true
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Cache pre-commit hooks
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit/
+          # Invalidate the cache if the pre-commit config changes or the Python version changes
+          key: pre-commit-cache|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit checks
+        run: pre-commit run --all-files --verbose
+
+      - name: Check that sources are ASCII
+        run: |
+          if grep -rnP '[^\x00-\x7F]' src include tools/probes; then
+            echo "Non-ASCII characters found (sjiswrap reads sources as Shift-JIS)"; exit 1
+          fi

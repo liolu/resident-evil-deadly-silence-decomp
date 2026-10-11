@@ -1,0 +1,39 @@
+build/
+.vscode/
+venv/
+
+*.nds
+*bios.bin
+/m2ctx
+*.sav
+*.xMAP
+objdiff.json
+/objdiff-cli
+/objdiff-cli.exe
+/dsd
+/dsd.exe
+/dsd.pdb
+build.ninja
+.ninja_log*
+.ninja_lock
+.ninja_deps
+/wibo
+/sjiswrap.exe
+/compile_commands.json
+
+# Rayman RR
+rrr_*/
+extract/*/
+
+# Optional third-party tools (see docs/automation.md)
+/tools/m2c/
+/tools/decomp-permuter/
+/tools/mwccarm/
+__pycache__/
+
+# local tooling / editors / nested clone
+/.qwen/
+/.vs/
+/Modelfile*
+/QWEN.md
+/Rayman-RR-usa-decomp/
