@@ -17,6 +17,7 @@ created over the same addresses, move the functions into it and delete their src
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -24,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -46,6 +48,58 @@ COMPILERS_TXT = ROOT / "config" / "usa" / "compilers.txt"
 MARKER = "/* compiler: "
 MAIN_TEXT = (0x02000000, 0x02118edc)
 CONTEXT = ROOT / "build" / "auto" / "m2c_context.c"
+
+
+FUNCTION_BUDGET = 45  # seconds spent on one function over all compilers/variants
+
+
+def run_limited(cmd, cwd=None, shell=False, timeout=15):
+    """subprocess.run with a time limit; the compiler sometimes loops forever on odd sources.
+    On timeout the whole process tree is killed and a failed result is returned."""
+    p = subprocess.Popen(cmd, shell=shell, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        import psutil
+        try:
+            for c in psutil.Process(p.pid).children(recursive=True):
+                c.kill()
+            p.kill()
+        except Exception:
+            pass
+        p.communicate()
+        return subprocess.CompletedProcess(cmd, 1, "", "timeout")
+    return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+
+AUTO_VERSION = hashlib.sha1(Path(__file__).read_bytes()).hexdigest()[:12]
+CACHE = WORK / "cache.jsonl"
+_M2C = {}
+
+
+def m2c_cached(name, cmd):
+    """m2c's output does not depend on the compiler: run it once per function and mode."""
+    key = (name, "--context" in cmd)
+    if key not in _M2C:
+        _M2C[key] = run_limited(cmd)
+    return _M2C[key]
+
+
+def cache_key(f):
+    return hashlib.sha1((function_asm(f[0]) or "").encode()).hexdigest()[:20] + f[0]
+
+
+def load_cache():
+    out = {}
+    if CACHE.exists() and not os.environ.get("AUTO_FRESH"):
+        for line in CACHE.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                d = json.loads(line)
+                if d["r"][3] == "match" or d.get("v") == AUTO_VERSION:  # failures are redone when the tool changed
+                    out[d["k"]] = tuple(d["r"])
+            except Exception:
+                pass  # a line cut by an interruption
+    return out
+
 
 
 def header(name: str) -> str:
@@ -189,8 +243,12 @@ def asm_function_general(name: str, asm: str) -> str | None:
 
 def try_function(f: tuple[str, int, int]) -> tuple[str, int, int, str, str]:
     """Tries every compiler; a match with a non-default compiler is tagged with a marker comment."""
+    _M2C.clear()
     first = None
+    t0 = time.time()
     for version, extra in COMPILERS:
+        if first is not None and time.time() - t0 > FUNCTION_BUDGET:
+            break
         result = try_function_with(f, MWCC_ROOT / version / "mwccarm.exe", extra)
         if result[3] == "match":
             if (version, extra) != COMPILERS[0]:
@@ -221,13 +279,18 @@ def try_function_with(f: tuple[str, int, int], mwcc: Path, extra: str = "") -> t
         # fail or produce calls that do not compile. Without context, only plain m2c.h types are used (m2c's own
         # extern declarations would conflict with m2c_protos.h).
         best = (name, size, addr, "m2c", "")
-        for cmd, head in ((m2c[:-1] + ["--context", str(CONTEXT), m2c[-1]], header(name)),
-                          (m2c, '#include "m2c.h"\n\n')):
-            result = evaluate(t, subprocess.run(cmd, capture_output=True, text=True), head, asm, f, mwcc, extra)
+        attempts = [(m2c[:-1] + ["--context", str(CONTEXT), m2c[-1]], header(name)),
+                    (m2c, '#include "m2c.h"\n\n')]
+        if os.environ.get("AUTO_ORDER", "noctx_first") == "noctx_first":
+            attempts.reverse()
+        for cmd, head in attempts:
+            result = evaluate(t, m2c_cached(name, cmd), head, asm, f, mwcc, extra)
             if RANK[result[3]] > RANK[best[3]]:
                 best = result
             if best[3] == "match":
                 break
+            if os.environ.get("AUTO_MODE2") == "fallback" and RANK[best[3]] >= RANK["size"]:
+                break  # compiled to something comparable: the second m2c mode rarely does better
         return best
 
 
@@ -287,7 +350,7 @@ def compile_and_compare(t: Path, source: str, name: str, size: int, addr: int, m
     (t / "f.o").unlink(missing_ok=True)
     (t / "f.c").write_text(source)
     cmd = f'"{mwcc}" -O4,p {pc.BASE_FLAGS} {extra} -i "{ROOT / "include"}" -c f.c -o f.o'
-    r = subprocess.run(cmd, shell=True, cwd=t, capture_output=True, text=True)
+    r = run_limited(cmd, cwd=t, shell=True)
     if r.returncode != 0 or not (t / "f.o").exists():
         return "compile"
     cand = pc.compiled_function(t / "f.o", name)
@@ -331,6 +394,11 @@ def variants(source: str, name: str) -> list[str]:
         guarded = irq_guard(base, name)
         if guarded:
             out.append(guarded)
+    # 7. Stack buffers declared as scalars, byte offsets on globals (see stack_buffers / addr_plus_var)
+    for base in [source] + ([vol] if vol != source else []):
+        for fixed in (stack_buffers(base, name), addr_plus_var(base)):
+            if fixed:
+                out.append(fixed)
     # 4. Arguments forwarded to callees: m2c declares callees without parameters (`func()`), so the compiler
     #    reuses r0-r3; in the game the function passes its own first k arguments through.
     for k in range(1, 5):
@@ -338,6 +406,56 @@ def variants(source: str, name: str) -> list[str]:
         if forwarded:
             out.append(forwarded)
     return out
+
+def stack_buffers(source: str, name: str) -> str | None:
+    """`M2C_UNK sp2;` only used as `&sp2` is really a buffer: size it from the stack frame of the original."""
+    asm = function_asm(name)
+    if not asm:
+        return None
+    frame = 0
+    for line in asm.splitlines()[1:]:
+        s = line.split(";")[0].strip()
+        m = re.match(r"sub sp, sp, #(0x[0-9a-fA-F]+|\d+)$", s)
+        if m:
+            frame += int(m.group(1), 0)
+        elif not s.startswith(("push", "stmfd", "stmdb")) and frame:
+            break
+    if frame <= 4:
+        return None
+    decl = re.compile(r"^    (?:[us](?:8|16|32)|M2C_UNK|void \*) \*?(sp[0-9A-F]+);\n", re.M)
+    offsets = {m.group(1): int(m.group(1)[2:], 16) for m in decl.finditer(source)}
+    if not offsets:
+        return None
+    ordered = sorted(offsets.values())
+    out = source
+    changed = False
+    for var, off in offsets.items():
+        uses = re.findall(rf"(&?)\b{var}\b", out)
+        if len(uses) < 2 or any(u != "&" for u in uses[1:]):
+            continue  # also used as a value: keep it a scalar
+        nxt = next((o for o in ordered if o > off), frame)
+        size = nxt - off
+        if size <= 4:
+            continue
+        out = re.sub(rf"^    (?:[us](?:8|16|32)|M2C_UNK|void \*) \*?{var};\n", f"    u8 {var}[{size}];\n", out, count=1, flags=re.M)
+        out = re.sub(rf"&{var}\b", var, out)
+        changed = True
+    return out if changed else None
+
+
+def addr_plus_var(source: str) -> str | None:
+    """`&data_X + temp_r3` on an M2C_UNK global is a byte offset."""
+    unk = set(re.findall(r"^extern M2C_UNK (\w+);", source, re.M))
+    if not unk:
+        return None
+
+    def repl(m):
+        if m.group(1) not in unk:
+            return m.group(0)
+        return f"(M2C_UNK *)((s8 *)&{m.group(1)} + {m.group(2)})"
+
+    out = re.sub(r"&(\w+) \+ ([A-Za-z_]\w*)\b(?!\()", repl, source)
+    return out if out != source else None
 
 
 IRQ_GUARDS = {"OS_DisableIrq": "OS_RestoreIrq", "OS_EnableIrq": "OS_RestoreIrq",
@@ -447,7 +565,7 @@ def permute_near(near: list[tuple[str, int, int, str]], count: int, minutes: flo
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("-j", type=int, default=os.cpu_count() or 4)
+    ap.add_argument("-j", type=int, default=int(os.environ.get("AUTO_JOBS", os.cpu_count() or 4)))
     ap.add_argument("--permute", type=int, default=0, metavar="N", help="Run the permuter on N near misses")
     ap.add_argument("--minutes", type=float, default=5.0, help="Permuter time per function")
     ap.add_argument("--dry-run", action="store_true", help="Only report, change nothing")
@@ -470,9 +588,19 @@ def main():
             raise SystemExit("New m2c_protos.h breaks the build: restored the previous one, stopping.")
 
     todo = candidates()
-    print(f"Trying {len(todo)} functions not yet in a source file...")
-    with Pool(args.j) as pool:
-        results = pool.map(try_function, todo, chunksize=8)
+    cached = load_cache()
+    keys = {f[0]: cache_key(f) for f in todo}
+    results = [cached[keys[f[0]]] for f in todo if keys[f[0]] in cached]
+    pending = [f for f in todo if keys[f[0]] not in cached]
+    print(f"Trying {len(pending)} functions ({len(results)} already in the cache)...", flush=True)
+    WORK.mkdir(parents=True, exist_ok=True)
+    with Pool(args.j) as pool, CACHE.open("a", encoding="utf-8") as cache_out:
+        for i, r in enumerate(pool.imap_unordered(try_function, pending, chunksize=4)):
+            results.append(r)
+            cache_out.write(json.dumps({"k": keys[r[0]], "v": AUTO_VERSION, "r": list(r)}) + chr(10))
+            cache_out.flush()
+            if i % 100 == 99:
+                print(f"[{i + 1}/{len(pending)}] evaluated", flush=True)
 
     stats = {}
     for r in results:
@@ -504,9 +632,27 @@ def main():
     print(f"Added {len(created)} functions to src/auto/, verifying...")
     subprocess.run([sys.executable, "tools/configure.py", "usa"], cwd=ROOT, check=True, capture_output=True)
     verify = subprocess.run([sys.executable, "tools/match.py", "verify"], cwd=ROOT, capture_output=True, text=True)
+    for _ in range(8):
+        bad = re.findall(r"FAIL: (src/auto/\S+?\.c) is marked complete", verify.stdout) if verify.returncode else []
+        if not bad:
+            break
+        print(f"Dropping {len(bad)} file(s) that do not match once linked: " + ", ".join(bad[:5]))
+        text = DELINKS.read_text()
+        for rel in bad:
+            text = re.sub(r"\n" + re.escape(rel) + r":\n    complete\n    \.text[^\n]*\n", "\n", text)
+            (ROOT / rel).unlink(missing_ok=True)
+        DELINKS.write_text(text, newline="\n")
+        if COMPILERS_TXT.exists():
+            keep = [l for l in COMPILERS_TXT.read_text().splitlines(True) if l.split(" ")[0] not in bad]
+            COMPILERS_TXT.write_text("".join(keep), newline="\n")
+        created = [c for c in created if c.relative_to(ROOT).as_posix() not in bad]
+        subprocess.run([sys.executable, "tools/configure.py", "usa"], cwd=ROOT, check=True, capture_output=True)
+        verify = subprocess.run([sys.executable, "tools/match.py", "verify"], cwd=ROOT, capture_output=True, text=True)
     print(verify.stdout.strip().splitlines()[-1] if verify.stdout else "")
     if verify.returncode != 0:
         print(verify.stdout[-3000:])
+        WORK.mkdir(parents=True, exist_ok=True)
+        (WORK / 'verify_fail.log').write_text(verify.stdout + chr(10) + verify.stderr, encoding='utf-8')
         print("Verification failed: rolling back.")
         DELINKS.write_bytes(backup)
         COMPILERS_TXT.write_bytes(compilers_backup)
