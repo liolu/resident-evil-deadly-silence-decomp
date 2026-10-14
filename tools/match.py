@@ -211,6 +211,11 @@ def main():
     p = sub.add_parser("verify")
     p.set_defaults(fn=cmd_verify)
     args = ap.parse_args()
+    if args.cmd == "verify":
+        # A run of auto_match / donor_match killed while integrating left unverified files: undo that first
+        # (nothing happens while a pipeline is running: it is the one calling verify)
+        from pipeline_lock import recover
+        recover()
     args.fn(args)
 
 

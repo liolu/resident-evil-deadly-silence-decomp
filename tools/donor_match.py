@@ -42,6 +42,7 @@ import project  # noqa: E402
 import donorlib  # noqa: E402
 import auto_match as am  # noqa: E402
 import probe_compiler as pc  # noqa: E402
+from pipeline_lock import journal_begin, journal_created, journal_end  # noqa: E402
 
 DS_ROOT = Path(os.environ.get("DS_ROOT", ROOT.parent.parent))  # decomp ds/ (projects live in decomp ds/projets/)
 DB = Path(os.environ.get("DONORS_DB", DS_ROOT / "donors.sqlite"))
@@ -742,7 +743,10 @@ def main():
         return
     delinks_backup = project.DELINKS.read_bytes()
     compilers_backup = project.COMPILERS_TXT.read_bytes() if project.COMPILERS_TXT.exists() else b""
+    # Killed before the end (job cancelled): the next run puts these files back and deletes the new sources
+    journal_begin([project.DELINKS, project.COMPILERS_TXT])
     entries = integrate(found)
+    journal_created([ROOT / rel for rel in entries])
     # The game repos check clang-format in CI: format now, the verification below covers the formatted files
     try:
         subprocess.run(["pre-commit", "run", "clang-format", "--files", *entries], cwd=ROOT, capture_output=True)
@@ -750,6 +754,7 @@ def main():
         print("pre-commit not found: files left unformatted")
     print(f"Added {len(entries)} functions to src/donor/, verifying...", flush=True)
     kept = verify(entries, delinks_backup, compilers_backup, args.bisect)
+    journal_end()
     print(f"OK: {len(kept)} functions reused from other decompilations." if kept else "Nothing added.")
 
 

@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import project  # noqa: E402  (this game's version, ROM name, paths: tools/project.py)
 sys.path.insert(0, str(ROOT / "tools"))
 import probe_compiler as pc  # noqa: E402
+from pipeline_lock import journal_begin, journal_created, journal_end  # noqa: E402
 
 DELINKS = project.DELINKS
 SYMBOLS = project.SYMBOLS
@@ -1018,14 +1019,20 @@ def main():
     subprocess.run(["ninja", "dis"], cwd=ROOT, check=True, capture_output=True)
     protos = ROOT / "include" / "m2c_protos.h"
     old_protos = protos.read_bytes() if protos.exists() else None
+    journal_begin([protos])
     subprocess.run([sys.executable, str(ROOT / "tools" / "gen_context.py")], cwd=ROOT, check=True)
     if old_protos is not None and protos.read_bytes() != old_protos:
-        # Files already in src/ include this header: make sure they still build before going on
-        check = subprocess.run([sys.executable, "tools/match.py", "verify"], cwd=ROOT, capture_output=True, text=True)
-        if check.returncode != 0:
-            print(check.stdout[-2000:])
+        # Files already in src/ include this header: make sure the ROM still builds byte-identical before going on
+        # (a ninja build: seconds; the objects do not change unless the header does)
+        import find_culprits
+        out = find_culprits.build()
+        if not find_culprits.rom_ok(out):
+            print(out[-2000:])
             protos.write_bytes(old_protos)
-            raise SystemExit("New m2c_protos.h breaks the build: restored the previous one, stopping.")
+            journal_end()
+            raise SystemExit("New m2c_protos.h breaks the build: restored the previous one, stopping. "
+                             "If the ROM already failed before, run tools/find_culprits.py.")
+    journal_end()
 
     todo = candidates()
     cached = load_cache()
@@ -1088,7 +1095,10 @@ def main():
 
     backup = DELINKS.read_bytes()
     compilers_backup = COMPILERS_TXT.read_bytes() if COMPILERS_TXT.exists() else b""
+    # Killed before the end (job cancelled): the next run puts these files back and deletes the new sources
+    journal_begin([DELINKS, COMPILERS_TXT])
     created = integrate(found)
+    journal_created(created)
     print(f"Added {len(created)} functions to src/auto/, verifying...")
     subprocess.run([sys.executable, "tools/configure.py", project.VERSION], cwd=ROOT, check=True, capture_output=True)
     verify = subprocess.run([sys.executable, "tools/match.py", "verify"], cwd=ROOT, capture_output=True, text=True)
@@ -1097,6 +1107,9 @@ def main():
         if not bad:
             break
         print(f"Dropping {len(bad)} file(s) that do not match once linked: " + ", ".join(bad[:5]))
+        # The cache keeps them as 'match': without this list every run would add them and verify again
+        with (WORK / "culprits.txt").open("a", encoding="utf-8") as f:
+            f.writelines(Path(b).stem + "\n" for b in bad)
         text = DELINKS.read_text()
         for rel in bad:
             text = re.sub(r"\n" + re.escape(rel) + r":\n    complete\n    \.text[^\n]*\n", "\n", text)
@@ -1133,7 +1146,9 @@ def main():
         for p in created:
             p.unlink()
         subprocess.run([sys.executable, "tools/configure.py", project.VERSION], cwd=ROOT, capture_output=True)
+        journal_end()
         sys.exit(1)
+    journal_end()
     print(f"OK: {len(created)} new matching functions.")
 
 
