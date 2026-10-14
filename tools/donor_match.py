@@ -118,12 +118,182 @@ def only_function(obj_file: Path, name: str) -> bool:
     return [f[0] for f in obj.functions()] == [name]
 
 
+# ---------------------------------------------------------------- our other projects as donors
+
+def _project_symbols(sym_file: Path) -> dict[int, str]:
+    out = {}
+    for line in sym_file.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = SYM_RE.match(line)
+        if m:
+            a = int(m.group(3), 16)
+            if m.group(2) == "function" or a not in out:
+                out[a] = m.group(1)
+    return out
+
+
+def _project_index(game_dir: Path) -> dict | None:
+    """Matched single-function source files of another project of this workspace, by fingerprint (cached in
+    decomp ds/donors_internal/<game>.json until its delinks.txt changes)."""
+    try:
+        dl = next(game_dir.glob("config/*/arm9/delinks.txt"))
+    except StopIteration:
+        return None
+    ver = dl.parent.parent.name
+    binp, yml = game_dir / "extract" / ver / "arm9" / "arm9.bin", game_dir / "extract" / ver / "arm9" / "arm9.yaml"
+    if not (binp.exists() and yml.exists()):
+        return None
+    cache = DS_ROOT / "donors_internal" / f"{game_dir.name}.json"
+    stamp = f"{dl.stat().st_mtime_ns}:{(dl.parent / 'symbols.txt').stat().st_mtime_ns}"
+    if cache.exists():
+        try:
+            d = json.loads(cache.read_text(encoding="utf-8"))
+            if d.get("stamp") == stamp:
+                return d
+        except Exception:
+            pass
+    base = int(re.search(r"base_address:\s*(\d+)", yml.read_text()).group(1))
+    data = binp.read_bytes()
+    funcs = {}
+    for line in (dl.parent / "symbols.txt").read_text(encoding="utf-8", errors="replace").splitlines():
+        m = re.match(r"(\S+) kind:function\(arm,size=0x([0-9a-f]+)\) addr:0x([0-9a-f]+)", line)
+        if m:
+            funcs[int(m.group(3), 16)] = (m.group(1), int(m.group(2), 16))
+    comp = {}
+    ct = dl.parent.parent / "compilers.txt"
+    for line in ct.read_text().splitlines() if ct.exists() else []:
+        line = line.split("#", 1)[0].strip()
+        if line:
+            path, ver_, *flags = line.split()
+            comp[path] = [ver_, " ".join(flags)]
+    m = re.search(r'^MWCC_VERSION\s*=\s*"([^"]+)"', (game_dir / "tools" / "configure.py").read_text(), re.M) \
+        if (game_dir / "tools" / "configure.py").exists() else None
+    default = [m.group(1) if m else "2.0/sp1p5", ""]
+    entries = {}
+    for path, a, b in re.findall(r"^(src/\S+):\n\s+complete\n\s+\.text\s+start:0x([0-9a-f]+) end:0x([0-9a-f]+)",
+                                 dl.read_text(), re.M):
+        a, b = int(a, 16), int(b, 16)
+        fn = funcs.get(a)
+        if not fn or a + fn[1] != b or not path.endswith(".c"):
+            continue  # only files holding exactly one function
+        fp = donorlib.fingerprint(data[a - base: b - base])
+        if fp:
+            entries.setdefault(fp, []).append([path, fn[0], a, fn[1]] + comp.get(path, default))
+    d = {"stamp": stamp, "version": ver, "base": base, "entries": entries}
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(d), encoding="utf-8")
+    return d
+
+
+_INTERNAL = None
+
+
+def internal_donors() -> list[tuple[Path, dict]]:
+    """[(project folder, index)] of the other projects of decomp ds/projets/."""
+    global _INTERNAL
+    if _INTERNAL is None:
+        _INTERNAL = []
+        for g in sorted((DS_ROOT / "projets").iterdir()) if (DS_ROOT / "projets").exists() else []:
+            if g.is_dir() and not g.name.startswith(("_", ".")) and g.resolve() != ROOT.resolve():
+                try:
+                    idx = _project_index(g)
+                except Exception:
+                    idx = None
+                if idx and idx["entries"]:
+                    _INTERNAL.append((g, idx))
+    return _INTERNAL
+
+
+def internal_rename(g: Path, idx: dict, d_addr: int, d_name: str, addr: int, size: int, target: bytes,
+                    syms: dict[int, str], our_name: str) -> tuple[dict, str]:
+    """{donor project symbol: our symbol}, read from the two ROMs: same instructions, so the literal pool words
+    and the calls are at the same places; the addresses they hold name the symbols on each side."""
+    data = (g / "extract" / idx["version"] / "arm9" / "arm9.bin").read_bytes()
+    donor = data[d_addr - idx["base"]: d_addr - idx["base"] + size]
+    dsyms = _project_symbols(g / "config" / idx["version"] / "arm9" / "symbols.txt")
+    n = size // 4
+    dw, tw = struct.unpack(f"<{n}I", donor), struct.unpack(f"<{n}I", target)
+    out = {d_name: our_name}
+    pool = donorlib.pool_words(dw)
+    for i in range(n):
+        if i in pool:
+            dv, tv = dw[i], tw[i]
+        elif (dw[i] & 0x0E000000) == 0x0A000000:
+            def dest(w, base):
+                s = w & 0xFFFFFF
+                return base + i * 4 + 8 + (s - (1 << 24) if s & 0x800000 else s) * 4
+            dv, tv = dest(dw[i], d_addr), dest(tw[i], addr)
+            if d_addr <= dv < d_addr + size:
+                continue  # branch inside the function
+        else:
+            continue
+        dn_, tn = dsyms.get(dv) or dsyms.get(dv & ~1), syms.get(tv) or syms.get(tv & ~1)
+        if dn_ is None:
+            if dv == tv:
+                continue  # a constant, not an address
+            return {}, f"no symbol at 0x{dv:08x} in {g.name}"
+        if tn is None:
+            return {}, f"no game symbol at 0x{tv:08x} (for {dn_})"
+        if out.get(dn_, tn) != tn:
+            return {}, f"{dn_} maps to two game symbols"
+        out[dn_] = tn
+    return out, ""
+
+
+def internal_preprocessed(g: Path, path: str, version: str, flags: str) -> str | None:
+    out = WORK / "pp_internal" / g.name / (path[:-2] + ".i.c")
+    if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        mwcc = am.MWCC_ROOT / version / "mwccarm.exe"
+        cmd = f'"{mwcc}" -E {pc.BASE_FLAGS} {flags} -i "{g / "include"}" "{g / path}" -o "{out}"'
+        subprocess.run(cmd, shell=True, cwd=g, capture_output=True, timeout=60)
+    return out.read_text(encoding="latin-1") if out.exists() else None
+
+
+def try_internal(f, target, fp, syms, log) -> tuple[str, str] | None:
+    name, size, addr = f
+    tried = 0
+    for g, idx in internal_donors():
+        for path, d_name, d_addr, d_size, version, flags in idx["entries"].get(fp, []):
+            if d_size != size or tried >= 4:
+                continue
+            tried += 1
+            rename, why = internal_rename(g, idx, d_addr, d_name, addr, size, target, syms, name)
+            if not rename:
+                log(f"  {name}: {g.name}:{d_name} skipped ({why})")
+                continue
+            pre = internal_preprocessed(g, path, version, flags)
+            status = "source not rebuilt"
+            for minimal in (True, False):
+                source = donorlib.candidate_source(pre, d_name, rename, minimal) if pre else None
+                if source is None:
+                    break
+                with tempfile.TemporaryDirectory() as tmp:
+                    t = Path(tmp)
+                    status = am.compile_and_compare(t, source, name, size, addr, am.MWCC_ROOT / version / "mwccarm.exe",
+                                                    flags)
+                    if status == "match" and not only_function(t / "f.o", name):
+                        status = "extra code or data"
+                if status == "match":
+                    break
+            log(f"  {name}: projets/{g.name}:{path}:{d_name} [{version} {flags}] -> {status}")
+            if status == "match":
+                head = (f"{am.MARKER}{version} {flags} */\n"
+                        f"/* {d_name} from projets/{g.name}/{path} (same code in another game of this workspace),"
+                        f" reused by tools/donor_match.py */\n")
+                return name, head + source
+    return None
+
+
 def try_one(dn, con, f, syms, log, licenses) -> tuple[str, str] | None:
     name, size, addr = f
     target = pc.target_bytes(addr, size)
     fp = donorlib.fingerprint(target)
     if fp is None:
         return None
+    # Our own projects first: their sources already match with our toolchain
+    r = try_internal(f, target, fp, syms, log)
+    if r:
+        return r
     rows = [r for r in con.execute("SELECT repo, file, profile, name, size, relocs FROM fn WHERE fp=? AND size=?",
                                    (fp, size)) if r[0] in licenses]
     if not rows:
@@ -252,6 +422,11 @@ def list_hits(con, todo, licenses):
     for name, size, addr in todo:
         fp = donorlib.fingerprint(pc.target_bytes(addr, size))
         if fp is None:
+            continue
+        own = [(g, e) for g, idx in internal_donors() for e in idx["entries"].get(fp, []) if e[3] == size]
+        if own:
+            g, e = own[0]
+            hits[name] = ["projets/" + g.name, e[1], e[0]]
             continue
         for repo, rel, dname in con.execute("SELECT repo, file, name FROM fn WHERE fp=? AND size=?", (fp, size)):
             if repo in licenses:
