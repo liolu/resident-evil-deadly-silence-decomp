@@ -468,14 +468,18 @@ def main():
             print(m, flush=True)
 
     found = []
+    print(f"Looking for donors of {len(todo)} unmatched functions...", flush=True)
     for i, f in enumerate(todo):
         r = try_one(dn, con, f, syms, log, licenses)
         if r:
             found.append((f[0], f[1], f[2], r[1]))
+            src = r[1].split("\n", 2)[1] if r[1].count("\n") > 1 else ""
+            m = re.search(r"from (\S+)", src)
+            print(f"  match {len(found)}: {f[0]} <- {m.group(1) if m else '?'}", flush=True)
             if args.max and len(found) >= args.max:
                 print(f"Reached --max {args.max}: the rest is left for the next batch", flush=True)
                 break
-        if i % 500 == 499:
+        if i % 50 == 49:
             print(f"[{i + 1}/{len(todo)}] {len(found)} matches", flush=True)
     (WORK / "attempts.log").write_text("\n".join(log_lines) + "\n", encoding="utf-8")
     tried = sum(1 for l in log_lines if " -> " in l or "skipped" in l)
