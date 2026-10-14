@@ -192,6 +192,21 @@ def inner_entries() -> dict[int, int]:
 _INNER = None
 
 
+def outside_pool_load(code: bytes, addr: int) -> int | None:
+    """The address of a word loaded pc-relative (`ldr rX, [pc, #imm]`) outside the function, or None. Hand-written
+    code can read a constant pool placed before it (DGTi_Hash2ProcessBlock): the ROM still matches, but `dsd dis`
+    then panics on the complete file, which stops auto_match."""
+    end = addr + len(code)
+    for i in range(len(code) // 4):
+        w, = struct.unpack_from("<I", code, i * 4)
+        if (w & 0x0F7F0000) == 0x051F0000 and w >> 28 != 0xF:
+            off = w & 0xFFF
+            t = addr + i * 4 + 8 + (off if w & 0x00800000 else -off)
+            if not addr <= t < end:
+                return t
+    return None
+
+
 def inner_entry(addr: int, size: int) -> int | None:
     """An address strictly inside [addr, addr + size) reached from outside the function, or None."""
     global _INNER
@@ -440,6 +455,10 @@ def try_one(dn, con, f, syms, log, licenses) -> tuple[str, str] | None:
     inner = inner_entry(addr, size)
     if inner is not None:
         log(f"  {name}: skipped (entry point 0x{inner:08x} inside the function, used elsewhere)")
+        return None
+    pool = outside_pool_load(target, addr)
+    if pool is not None:
+        log(f"  {name}: skipped (loads 0x{pool:08x}, a constant pool outside the function: dsd dis cannot split it)")
         return None
     style = am.code_style(addr, size)
     # Our own projects first: their sources already match with our toolchain
