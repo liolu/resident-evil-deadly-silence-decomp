@@ -143,6 +143,8 @@ def main():
                 cmd = f'"{cc}" {flags} {BASE_FLAGS} -i "{ROOT / 'include'}" -c "{args.source.resolve()}" -o "{obj}"'
                 r = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=tmp)
                 if r.returncode != 0 or not obj.exists():
+                    if args.show:
+                        print("\n".join((r.stdout + r.stderr).strip().splitlines()[:12]))
                     row.append(f"{flags}: compile error")
                     continue
                 cand = compiled_function(obj, args.function)

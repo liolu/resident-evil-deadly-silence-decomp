@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -241,12 +242,42 @@ def asm_function_general(name: str, asm: str) -> str | None:
             f"// clang-format off\nasm void {name}(void) {{\n" + "\n".join(out) + "\n}\n// clang-format on\n")
 
 
+def code_style(addr: int, size: int) -> str:
+    """Which compiler a compiled function comes from, judged on its epilogue (checked on the ~2,100 functions
+    already matched: no function contradicts it, except hand-written assembly):
+      v20    `ldmfd sp!, {..., pc}`            -> mwccarm 2.0
+      v12    `ldmfd sp!, {..., lr}` + `bx lr`  -> mwccarm 1.2
+      other  leaf functions (no stack frame) and anything else: any compiler."""
+    data = pc.target_bytes(addr, size)
+    words = struct.unpack(f"<{len(data) // 4}I", data[: len(data) // 4 * 4])
+    pops = [w for w in words if (w & 0xFFFF0000) == 0xE8BD0000]  # ldmfd sp!, {...}
+    pc_ret = any(w & 0x8000 for w in pops)
+    lr_ret = any(w & 0x4000 and not w & 0x8000 for w in pops)
+    if lr_ret and 0xE12FFF1E in words and not pc_ret:  # bx lr
+        return "v12"
+    if pc_ret and not lr_ret:
+        return "v20"
+    return "other"
+
+
+def profiles_for(name: str, size: int, addr: int) -> list[tuple[str, str]]:
+    """Compiler profiles worth trying for one function (all of them when in doubt; AUTO_ALL_PROFILES=1 forces that)."""
+    if os.environ.get("AUTO_ALL_PROFILES") or ASM_ONLY.search(function_asm(name) or ""):
+        return COMPILERS
+    style = code_style(addr, size)
+    if style == "v20":
+        return [c for c in COMPILERS if c[0].startswith("2.")]
+    if style == "v12":
+        return [c for c in COMPILERS if c[0].startswith("1.")]
+    return COMPILERS
+
+
 def try_function(f: tuple[str, int, int]) -> tuple[str, int, int, str, str]:
     """Tries every compiler; a match with a non-default compiler is tagged with a marker comment."""
     _M2C.clear()
     first = None
     t0 = time.time()
-    for version, extra in COMPILERS:
+    for version, extra in profiles_for(*f):
         if first is not None and time.time() - t0 > FUNCTION_BUDGET:
             break
         result = try_function_with(f, MWCC_ROOT / version / "mwccarm.exe", extra)
@@ -317,12 +348,83 @@ def evaluate(t: Path, r: subprocess.CompletedProcess, head: str, asm: str, f: tu
                 source, status = fixed, fixed_status
                 if status == "match":
                     return name, size, addr, status, source
+    if status == "compile":
+        # m2c typed an address as an integer: let the compiler say which line, and cast the operand
+        fixed = fix_pointer_bases(t, source, mwcc, extra)
+        if fixed is not None and fixed != source:
+            fixed_status = compile_and_compare(t, fixed, name, size, addr, mwcc, extra)
+            if fixed_status != "compile":
+                source, status = fixed, fixed_status
+                if status == "match":
+                    return name, size, addr, status, source
     if status in ("near", "size"):
-        # Close but not exact: try the known m2c corrections one by one
-        for variant in variants(source, name):
-            if compile_and_compare(t, variant, name, size, addr, mwcc, extra) == "match":
+        # Close but not exact: try the known m2c corrections, all in one compiler call (the first match in the
+        # order of the list wins, as when they were tried one by one)
+        singles = variants(source, name)
+        for variant, variant_status in zip(singles, compile_batch(t, singles, name, size, addr, mwcc, extra)):
+            if variant_status == "match":
                 return name, size, addr, "match", variant
     return name, size, addr, status, source
+
+
+ERROR_LINE = re.compile(r"^#\s+(\d+):\s?(.*)$")
+POINTER_CASTS = ("s8 *", "s32 *", "s16 *", "u8 *", "M2C_UNK *")
+
+
+def compile_error(t: Path, source: str, mwcc: Path = MWCC, extra: str = "") -> tuple[int, str] | None:
+    """(line number, message) of the first compiler error, or None when the source compiles."""
+    (t / "f.o").unlink(missing_ok=True)
+    (t / "f.c").write_text(source)
+    cmd = f'"{mwcc}" -O4,p {pc.BASE_FLAGS} {extra} -i "{ROOT / "include"}" -c f.c -o f.o'
+    r = run_limited(cmd, cwd=t, shell=True)
+    if r.returncode == 0 and (t / "f.o").exists():
+        return None
+    lines = ((r.stdout or "") + (r.stderr or "")).splitlines()
+    for i, line in enumerate(lines):
+        if "Error:" in line:
+            lineno = -1
+            for j in range(i - 1, max(-1, i - 3), -1):
+                match = ERROR_LINE.match(lines[j])
+                if match:
+                    lineno = int(match.group(1))
+                    break
+            return lineno, lines[i + 1].lstrip("# ").strip() if i + 1 < len(lines) else ""
+    return -1, "unknown error"
+
+
+def cast_operand(source: str, line_index: int, cast: str) -> str | None:
+    """`*(E)` -> `*(cast)(E)` at the first dereference of that line that is not already cast."""
+    lines = source.splitlines()
+    if not (0 <= line_index < len(lines)):
+        return None
+    line = lines[line_index]
+    for m in re.finditer(r"\*\(", line):
+        if re.match(r"(?:[A-Za-z_]\w*\s*)*\*\)\(", line[m.end():]):  # already `*(type *)(`
+            continue
+        lines[line_index] = line[:m.start()] + f"*({cast})(" + line[m.end():]
+        return "\n".join(lines)
+    return None
+
+
+def fix_pointer_bases(t: Path, source: str, mwcc: Path = MWCC, extra: str = "") -> str | None:
+    """m2c computed an address in an integer (`temp_r3 = arg0 + 5; *(temp_r3 + arg1)`) so the draft does not
+    compile. Casting the whole operand keeps the byte arithmetic; the compiler's error line says where.
+    Returns a source that compiles, or None. 156 of the 295 compile failures start this way."""
+    for _ in range(8):
+        err = compile_error(t, source, mwcc, extra)
+        if err is None:
+            return source
+        lineno, message = err
+        if "pointer/array type was expected" not in message:
+            return None
+        for cast in POINTER_CASTS:
+            fixed = cast_operand(source, lineno - 1, cast)
+            if fixed is not None and fixed != source:
+                source = fixed
+                break
+        else:
+            return None
+    return None
 
 
 def compile_fixes(source: str) -> str:
@@ -360,6 +462,63 @@ def compile_and_compare(t: Path, source: str, name: str, size: int, addr: int, m
     if bad == 0:
         return "match"
     return "near" if len(cand) == size else "size"
+
+
+def compile_batch(t: Path, sources: list[str], name: str, size: int, addr: int, mwcc: Path = MWCC,
+                  extra: str = "") -> list[str]:
+    """Same result as `compile_and_compare` on each source, in far fewer compiler calls.
+
+    The compiler spends about a second starting up and almost nothing per file, so all the sources go into one call
+    (`-c v0.c v1.c ... -o objs`). When a file has an error the compiler stops there: that file is `compile`, and the
+    files after it are compiled by the next call. Identical sources are compiled once."""
+    if not sources:
+        return []
+    unique = list(dict.fromkeys(sources))
+    work = t / "batch"
+    shutil.rmtree(work, ignore_errors=True)
+    (work / "objs").mkdir(parents=True)
+    for i, s in enumerate(unique):
+        (work / f"v{i}.c").write_text(s)
+    target = pc.target_bytes(addr, size)
+    result = {}
+    pending = list(range(len(unique)))
+    while pending:
+        files = " ".join(f"v{i}.c" for i in pending)
+        cmd = f'"{mwcc}" -O4,p {pc.BASE_FLAGS} {extra} -i "{ROOT / "include"}" -c {files} -o objs'
+        r = run_limited(cmd, cwd=work, shell=True, timeout=15 + len(pending) // 2)
+        if r.stderr == "timeout":
+            # One source makes the compiler loop: find it by compiling the rest one at a time
+            for i in pending:
+                result[i] = compile_and_compare(t, unique[i], name, size, addr, mwcc, extra)
+            break
+        missing = []
+        for i in pending:
+            obj = work / "objs" / f"v{i}.o"
+            if not obj.exists():
+                missing.append(i)  # not compiled: error, or not reached because of an earlier error
+                continue
+            cand = pc.compiled_function(obj, name)
+            if cand is None:
+                result[i] = "compile"  # compiled, but the function is not in the object
+                continue
+            bad, _ = pc.compare(target, cand)
+            result[i] = "match" if bad == 0 else ("near" if len(cand) == size else "size")
+        if not missing:
+            break
+        result[missing[0]] = "compile"  # the compiler stopped on the first missing file
+        pending = missing[1:]
+    return [result.get(unique.index(s), "compile") for s in sources]
+
+
+def diff_count(t: Path, name: str, size: int, addr: int, source: str, mwcc: Path = MWCC, extra: str = "") -> int:
+    """Number of differing instructions of a draft (a large number when it does not compile or changes size)."""
+    (t / "f.o").unlink(missing_ok=True)
+    (t / "f.c").write_text(source)
+    run_limited(f'"{mwcc}" -O4,p {pc.BASE_FLAGS} {extra} -i "{ROOT / "include"}" -c f.c -o f.o', cwd=t, shell=True)
+    cand = pc.compiled_function(t / "f.o", name) if (t / "f.o").exists() else None
+    if not cand or len(cand) != size:
+        return 10**6
+    return pc.compare(pc.target_bytes(addr, size), cand)[0]
 
 
 def variants(source: str, name: str) -> list[str]:
@@ -405,6 +564,262 @@ def variants(source: str, name: str) -> list[str]:
         forwarded = forward_args(source, name, k)
         if forwarded:
             out.append(forwarded)
+    # 8. Accumulated flags/sums: m2c folds `x = 0; if (c) x |= 0x10;` into `x = 0x10;`
+    out += accumulate(source)
+    # 9. Element type of tables at unknown globals: `*(&data_X + (i * 2))` -> `((s16 *)&data_X)[i]`
+    out += typed_tables(source)
+    # 10. Rotated `for` loops, local signedness, signed constants and byte offsets (see each function)
+    out += rotated_loops(source)
+    out += local_types(source)
+    out += signed_constants(source)
+    out += pointer_add_bytes(source)
+    # 11. A wrapper only reads part of its arguments, so m2c declares fewer parameters than the game passes on
+    out += forward_extra_arg(source, name)
+    # 12. Load type of a global reached through `(M2C_UNK *)((s8 *)&data_X + n)`: byte and halfword loads
+    out += typed_global_loads(source)
+    # 13. Consecutive word copies are one struct assignment (`ldm`/`stm` in the game)
+    out += struct_copy(source, name)
+    return out
+
+
+def accumulate(source: str) -> list[str]:
+    """`x = K;` after `x = 0;` where x is also accumulated with `|=` / `+=`: the original accumulated there too."""
+    out = []
+    zero = set(re.findall(r"^\s+(\w+) = 0;$", source, re.M))
+    for op in ("|=", "+="):
+        names = zero & set(re.findall(rf"^\s+(\w+) {re.escape(op)} ", source, re.M))
+        if not names:
+            continue
+        fixed = re.sub(r"^(\s+)(\w+) = (?!0;)([^;\n]+);$",
+                       lambda m: f"{m.group(1)}{m.group(2)} {op} {m.group(3)};" if m.group(2) in names else m.group(0),
+                       source, flags=re.M)
+        if fixed != source:
+            out.append(fixed)
+    return out
+
+
+def _closing(s: str, i: int) -> int:
+    """Index of the parenthesis closing the one opened just before s[i]."""
+    depth = 1
+    while i < len(s):
+        depth += {"(": 1, ")": -1}.get(s[i], 0)
+        if depth == 0:
+            return i
+        i += 1
+    return -1
+
+
+TABLE_TYPES = {1: ("s8", "u8"), 2: ("s16", "u16"), 4: ("s32",)}
+
+
+def typed_tables(source: str) -> list[str]:
+    """m2c leaves `*(&data_X + byte_offset)` when data_X is an `M2C_UNK`: the load type is lost. Rewrite it as an
+    indexed table of each plausible element type (from the scale of the offset)."""
+    out = []
+    for g in sorted(set(re.findall(r"^extern M2C_UNK (\w+);", source, re.M))):
+        for ty_index in range(2):
+            fixed, pos, changed = source, 0, False
+            while True:
+                start = fixed.find(f"*(&{g} + ", pos)
+                if start < 0:
+                    break
+                body = start + len(f"*(&{g} + ")
+                end = _closing(fixed, body)
+                if end < 0:
+                    break
+                offset = fixed[body:end]
+                scale = 1
+                m = re.fullmatch(r"\((.*) \* ([124])\)", offset)
+                if m and _closing(offset, 1) == len(offset) - 1:
+                    offset, scale = m.group(1), int(m.group(2))
+                types = TABLE_TYPES[scale]
+                if ty_index >= len(types):
+                    pos = end
+                    continue
+                repl = f"(({types[ty_index]} *)&{g})[{offset}]"
+                fixed = fixed[:start] + repl + fixed[end + 1:]
+                pos = start + len(repl)
+                changed = True
+            if changed:
+                out.append(fixed)
+    return out
+
+
+# The compiler turns `for (v = init; cond; step)` into a do/while with an entry test at the top; m2c rebuilds
+# that rotated shape as `if (guard) { do { step; body } while (cond); }`. The original is often the `for` loop.
+ROTATED_LOOP = re.compile(
+    r"^(?P<ind>[ ]*)(?P<var>\w+) = (?P<init>[^;\n]+);\n"
+    r"^(?P=ind)if \((?P<guard>[^()]*(?:\([^()]*\)[^()]*)*)\) \{\n"
+    r"^(?P=ind)    do \{\n"
+    r"(?P<body>(?:^(?P=ind)        [^\n]*\n)+)"
+    r"^(?P=ind)    \} while \((?P<cond>[^\n]*)\);\n"
+    r"^(?P=ind)\}\n", re.M)
+ROTATED_LOOP_NO_INIT = re.compile(
+    r"^(?P<ind>[ ]*)if \((?P<guard>[^()]*(?:\([^()]*\)[^()]*)*)\) \{\n"
+    r"^(?P=ind)    do \{\n"
+    r"(?P<body>(?:^(?P=ind)        [^\n]*\n)+)"
+    r"^(?P=ind)    \} while \((?P<cond>[^\n]*)\);\n"
+    r"^(?P=ind)\}\n", re.M)
+LOOP_STEP = re.compile(r"^\s*(\w+) (\+=|-=|\|=|&=|\*=|/=) ([^;]+);\s*$")
+LOOP_STEP_INCDEC = re.compile(r"^\s*(\w+)(\+\+|--);\s*$")
+
+
+def rotated_loops(source: str) -> list[str]:
+    """Writes a rotated loop back as the `for` loop the compiler started from (`func_0205e720`)."""
+    out = []
+    for regex, withinit in ((ROTATED_LOOP, True), (ROTATED_LOOP_NO_INIT, False)):
+        m = regex.search(source)
+        if not m:
+            continue
+        ind, cond = m.group("ind"), m.group("cond")
+        lines = [line for line in m.group("body").splitlines() if line.strip()]
+        names = set(re.findall(r"\b(\w+)\b", cond))
+        step, step_index = None, -1
+        for i, line in enumerate(lines):
+            match = LOOP_STEP.match(line) or LOOP_STEP_INCDEC.match(line)
+            if match and match.group(1) in names:
+                step, step_index = line.strip().rstrip(";"), i
+                break
+        if step is None:
+            continue
+        del lines[step_index]
+        rest = "\n".join(f"{ind}    {line.strip()}" for line in lines)
+        init = f'{m.group("var")} = {m.group("init")}' if withinit else ""
+        new = f"{ind}for ({init}; {cond.strip()}; {step}) {{\n{rest}\n{ind}}}\n"
+        out.append(source[:m.start()] + new + source[m.end():])
+    return out
+
+
+def local_types(source: str) -> list[str]:
+    """m2c types every local `s32`; the original often uses an unsigned type there, which makes the compiler
+    emit an unsigned condition (`addcc`) where the game has a signed one (`addlt`)."""
+    out = []
+    for old, new in (("s32", "u32"), ("u32", "s32")):
+        fixed = re.sub(rf"^(    ){old} (\w+);$", rf"\1{new} \2;", source, flags=re.M)
+        if fixed != source:
+            out.append(fixed)
+    return out
+
+
+SIGNED_COMPARISON = re.compile(r"(<=|>=|==|!=|<|>)\s*(0x[89A-Fa-f][0-9A-Fa-f]{7})\b")
+
+
+def signed_constants(source: str) -> list[str]:
+    """`0xFFFFCDBC` has type `unsigned int` in C, so `x < 0xFFFFCDBC` compiles as an unsigned comparison.
+    m2c writes negative constants that way; the original wrote the signed value."""
+    fixed = SIGNED_COMPARISON.sub(lambda m: f"{m.group(1)} {int(m.group(2), 16) - 0x100000000}", source)
+    return [fixed] if fixed != source else []
+
+
+POINTER_LOCAL = re.compile(r"^[ \t]+([A-Za-z_][\w ]*?)\s*\*[ \t]*(\w+);", re.M)
+
+
+def pointer_add_bytes(source: str) -> list[str]:
+    """`var_r1 += 0xC;` on a pointer m2c typed `M2C_UNK *` means 12 bytes, but C scales the offset by 4."""
+    types = {m.group(2): m.group(1).strip() for m in POINTER_LOCAL.finditer(source)}
+    if not types:
+        return []
+    out = source
+    for var, ty in types.items():
+        def repl(m, var=var, ty=ty):
+            sign = "+" if m.group(2) == "+=" else "-"
+            return f"{m.group(1)}{var} = ({ty} *)((s8 *){var} {sign} {m.group(3)});"
+        out = re.sub(rf"^(\s*){re.escape(var)} (\+=|-=) (0x[0-9A-Fa-f]+|\d+);$", repl, out, flags=re.M)
+    return [out] if out != source else []
+
+
+CAST_GLOBAL_LOAD = re.compile(r"\*\(\(M2C_UNK \*\)\(\(s8 \*\)&")
+GLOBAL_LOAD_TYPES = ("u8", "s8", "u16", "s16", "u32")
+
+
+def typed_global_loads(source: str) -> list[str]:
+    """`fix_byte_offsets` and `addr_plus_var` write `&data_X + n` as `(M2C_UNK *)((s8 *)&data_X + (n))`, so the
+    load is always 32 bits wide even when the game loads a byte or a halfword (`ldrb` became `ldr`). The byte
+    offset is kept as it is and only the pointee type is changed."""
+    if not CAST_GLOBAL_LOAD.search(source):
+        return []
+    out = []
+    for ty in GLOBAL_LOAD_TYPES:
+        fixed = CAST_GLOBAL_LOAD.sub(f"*(({ty} *)((s8 *)&", source)
+        if fixed != source:
+            out.append(fixed)
+    return out
+
+
+COPY_STMT = re.compile(r"^    M2C_FIELD\((?P<d>\w+), s32 \*, (?P<do>0x[0-9A-Fa-f]+|\d+)\) = "
+                       r"\(s32\) M2C_FIELD\((?P<s>\w+), s32 \*, (?P<so>0x[0-9A-Fa-f]+|\d+)\);$", re.M)
+TEMP_INIT = re.compile(r"^    (?P<v>\w+) = (?P<base>\w+) \+ (?P<k>0x[0-9A-Fa-f]+|\d+);$", re.M)
+
+
+def struct_copy(source: str, name: str) -> list[str]:
+    """Consecutive word copies from one base to another are a single struct assignment in the game: the
+    compiler emits `ldm r1, {r0-r3}; stm ip, {r0-r3}` for a 16-byte structure copy (`func_0204a038`)."""
+    stmts = list(COPY_STMT.finditer(source))
+    if not 2 <= len(stmts) <= 8:
+        return []
+    temps = {m.group("v"): (m.group("base"), int(m.group("k"), 0)) for m in TEMP_INIT.finditer(source)}
+
+    def resolve(var):
+        if var in temps:
+            base, offset = temps[var]
+            return None if base in temps else (base, offset)
+        return var, 0
+
+    rows = []
+    for m in stmts:
+        dst, src = resolve(m.group("d")), resolve(m.group("s"))
+        if dst is None or src is None:
+            return []
+        rows.append((int(m.group("do"), 0) + dst[1], int(m.group("so"), 0) + src[1], dst[0], src[0]))
+    if len({r[2] for r in rows}) != 1 or len({r[3] for r in rows}) != 1:
+        return []
+    dst_offs, src_offs = [r[0] for r in rows], [r[1] for r in rows]
+    if any(b - a != 4 for a, b in zip(dst_offs, dst_offs[1:])) or \
+       any(b - a != 4 for a, b in zip(src_offs, src_offs[1:])):
+        return []
+    sig = re.search(r"^[A-Za-z_][\w \*]*?\b\w+\([^)]*\) \{$", source, re.M)
+    if not sig:
+        return []
+    n = len(rows)
+    ty = f"M2C_S{n * 4}"
+    typedef = f"typedef struct {{ {' '.join('s32 f%d;' % i for i in range(n))} }} {ty};\n\n"
+    stmt = (f"    *({ty} *)((s8 *){rows[0][2]} + {dst_offs[0]}) = *({ty} *)((s8 *){rows[0][3]} + {src_offs[0]});\n")
+    fixed = source[:stmts[0].start()] + stmt + source[stmts[-1].end():]
+    return [fixed[:sig.start()] + typedef + fixed[sig.start():]]
+
+
+def forward_extra_arg(source: str, name: str) -> list[str]:
+    """A wrapper that passes its arguments through: m2c only declares the parameters it reads, so the wrapper
+    looks one or two parameters shorter than the game (`func_0200bd40` forwards three to `func_02017f60`)."""
+    out = []
+    sig = re.search(rf"^(?P<ret>[A-Za-z_][\w \*]*?){re.escape(name)}\((?P<params>[^)]*)\) \{{$", source, re.M)
+    if not sig:
+        return out
+    params_txt = sig.group("params")
+    params = [] if params_txt.strip() in ("", "void") else [p.strip() for p in params_txt.split(",")]
+    n = len(params)
+    last_type = re.match(r"(.*?)\s*\w+$", params[-1]).group(1) if params else "M2C_UNK"
+    body_start = sig.end()
+    seen = set()
+    for m in re.finditer(r"^(    )(\w+)\(([^;()]*)\);$", source[body_start:], re.M):
+        args = [a.strip() for a in m.group(3).split(",") if a.strip()]
+        if len(args) != n or m.group(2) in seen:
+            continue
+        seen.add(m.group(2))
+        for extra in (1, 2):
+            new_params = params + [f"{last_type} arg{n + i}" for i in range(extra)]
+            new_args = args + [f"arg{n + i}" for i in range(extra)]
+            call = f"{m.group(1)}{m.group(2)}({', '.join(new_args)});"
+            new = (source[:sig.start("params")] + ", ".join(new_params)
+                   + source[sig.end("params"):body_start + m.start()] + call
+                   + source[body_start + m.end():])
+            # The callee is usually declared in the same draft: widen its declaration too
+            decl = re.search(rf"^([A-Za-z_][\w \*]*?){re.escape(m.group(2))}\(([^)]*)\);", new, re.M)
+            if decl:
+                existing = [p for p in decl.group(2).split(",") if p.strip() and p.strip() != "void"]
+                filled = existing + ["M2C_UNK"] * max(0, len(new_args) - len(existing))
+                new = new[:decl.start(2)] + ", ".join(filled) + new[decl.end(2):]
+            out.append(new)
     return out
 
 def stack_buffers(source: str, name: str) -> str | None:
@@ -548,15 +963,36 @@ def integrate(found: list[tuple[str, int, int, str]]) -> list[Path]:
     return created
 
 
+PERMUTE_STATE = WORK / "permute_state.json"
+
+
 def permute_near(near: list[tuple[str, int, int, str]], count: int, minutes: float) -> list[tuple[str, int, int, str]]:
-    """Runs the permuter on the smallest near misses; returns the ones that reached a match."""
+    """Runs the permuter on near misses that were not tried yet; returns the ones that reached a match.
+    Every attempt is written to build/auto/permute_state.json (after each function, so an interruption loses nothing):
+    the next run goes on with the following functions. AUTO_PERMUTE_MAX = attempts per function (default 1),
+    AUTO_PERMUTE_RETRY=1 retries the ones that failed."""
+    try:
+        state = json.loads(PERMUTE_STATE.read_text(encoding="utf-8"))
+    except Exception:
+        state = {}
+    limit = 10**6 if os.environ.get("AUTO_PERMUTE_RETRY") else int(os.environ.get("AUTO_PERMUTE_MAX", "1"))
+    todo = [x for x in near if state.get(x[0], {}).get("attempts", 0) < limit]
+    print(f"  permuter: {len(near)} near misses, {len(near) - len(todo)} already tried, {len(todo)} left", flush=True)
     won = []
-    for name, size, addr, source in sorted(near, key=lambda x: x[1])[:count]:
+    # Least tried first, then fewest differing instructions: those are the ones the permuter can actually finish
+    with tempfile.TemporaryDirectory() as tmp:
+        ranked = sorted(todo, key=lambda x: (state.get(x[0], {}).get("attempts", 0), diff_count(Path(tmp), *x), x[1]))
+    for name, size, addr, source in ranked[:count]:
         src = WORK / "near" / f"{name}.c"
-        r = subprocess.run([sys.executable, str(ROOT / "tools" / "permute.py"), name, "--source", str(src),
-                            "--minutes", str(minutes)], cwd=ROOT, capture_output=True, text=True)
+        subprocess.run([sys.executable, str(ROOT / "tools" / "permute.py"), name, "--source", str(src),
+                        "--minutes", str(minutes)], cwd=ROOT, capture_output=True, text=True)
         best = sorted((ROOT / "build" / "permuter" / name).glob("output-0-*"))
-        print(f"  {name}: {'MATCH' if best else 'no match'}")
+        print(f"  {name}: {'MATCH' if best else 'no match'}", flush=True)
+        st = state.setdefault(name, {"attempts": 0})
+        st["attempts"] += 1
+        st["minutes"] = st.get("minutes", 0) + minutes
+        st["result"] = "match" if best else "no match"
+        PERMUTE_STATE.write_text(json.dumps(state), encoding="utf-8")
         if best:
             # The permuter output is preprocessed and self-contained
             won.append((name, size, addr, (best[0] / "source.c").read_text(encoding="utf-8")))
@@ -664,4 +1100,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from pipeline_lock import pipeline_lock
+
+    with pipeline_lock("auto_match"):
+        main()
