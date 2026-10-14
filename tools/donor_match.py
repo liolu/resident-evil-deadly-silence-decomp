@@ -586,6 +586,20 @@ def verify(entries: dict[str, tuple[str, str]], delinks_backup: bytes, compilers
         drop(bad, "the ROM differs")
         ok, out = rom_build()
     if not ok and keep:
+        # Before blaming the new files one by one: the ROM must build without them, else every one of them would
+        # "fail" alone and be listed as a culprit for nothing
+        declare(entries, [], sources, delinks_backup, compilers_backup)
+        base_ok, base_out = rom_build()
+        if not base_ok:
+            print("The ROM does not build even without the new files: fix that first (nothing is blamed).",
+                  flush=True)
+            for c in find_culprits.find(base_out):
+                print(f"  {c['file']}: {'; '.join(c['reasons'][:2])}", flush=True)
+            failed = re.findall(r"^FAILED: .*$", base_out, re.M)
+            if failed:
+                print("  ninja: " + failed[0][:200], flush=True)
+            keep = []
+    if not ok and keep:
         keep = bisect(entries, keep, sources, delinks_backup, compilers_backup, bisect_builds)
         declare(entries, keep, sources, delinks_backup, compilers_backup)
         ok, out = rom_build() if keep else (False, out)

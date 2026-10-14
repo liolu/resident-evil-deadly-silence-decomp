@@ -116,6 +116,14 @@ def find(build_output: str) -> list[dict]:
 
     for m in re.finditer(r"^(src[\\/]\S+?\.(?:c|cpp|s)):(\d+):.*error", build_output, re.M | re.I):
         add(m.group(1), f"compile error line {m.group(2)}")
+    # The object ninja could not build: mwccarm does not always print "error" (e.g. "<string not found>" when an
+    # asm block was mangled), but ninja names the failed object, build/<version>/src/....o
+    for m in re.finditer(r"^FAILED: (?:\[code=\d+\] )?build[\\/][^\\/\s]+[\\/](src[\\/]\S+?)\.o\s*$", build_output, re.M):
+        stem = m.group(1).replace("\\", "/")
+        for ext in (".c", ".cpp", ".s"):
+            if (ROOT / (stem + ext)).exists():
+                add(stem + ext, "does not compile (ninja: FAILED)")
+                break
     all_files = [(f, s, e) for mod in modules() for f, s, e in complete_files(mod["delinks"])]
     for m in re.finditer(r"Symbol '(\S+)' at 0x([0-9a-f]+) in (.+?) (is .*)", build_output):
         addr = int(m.group(2), 16)
