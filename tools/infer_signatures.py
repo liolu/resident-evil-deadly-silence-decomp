@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guesses the signature of every function from the disassembly (build/usa/asm), for the m2c context.
+"""Guesses the signature of every function from the disassembly (build/<version>/asm), for the m2c context.
 
 - Arguments: registers r0-r3 read before being written, scanning the function from its start up to the
   first call or return (straight-line approximation).
@@ -13,7 +13,10 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ASM_DIR = ROOT / "build" / "usa" / "asm"
+import sys  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import project  # noqa: E402  (this game's version, ROM name, paths: tools/project.py)
+ASM_DIR = project.ASM_DIR
 ARGS = ["r0", "r1", "r2", "r3"]
 WRITES_FIRST = re.compile(r"^(mov|mvn|add|sub|rsb|and|orr|eor|bic|lsl|lsr|asr|ror|mul|ldr\w*|adr)s?\w*$")
 NO_WRITE = re.compile(r"^(cmp|cmn|tst|teq|str\w*|push|pop|b|bx|blx|bl|stm\w*)$")

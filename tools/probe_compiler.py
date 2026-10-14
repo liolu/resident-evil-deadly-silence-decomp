@@ -21,8 +21,11 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ARM9_BIN = ROOT / "extract" / "usa" / "arm9" / "arm9.bin"
-SYMBOLS = ROOT / "config" / "usa" / "arm9" / "symbols.txt"
+import sys  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import project  # noqa: E402  (this game's version, ROM name, paths: tools/project.py)
+ARM9_BIN = project.EXTRACT / "arm9" / "arm9.bin"
+SYMBOLS = project.SYMBOLS
 ARM9_BASE = 0x02000000
 
 BASE_FLAGS = "-enum int -char signed -str noreuse -proc arm946e -gccext,on -fp soft -inline noauto -lang=c -interworking -w off -nolink"

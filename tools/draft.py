@@ -21,10 +21,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ASM_DIR = ROOT / "build" / "usa" / "asm"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import project  # noqa: E402  (this game's version, ROM name, paths: tools/project.py)
+ASM_DIR = project.ASM_DIR
 DRAFTS = ROOT / "build" / "drafts"
-REPORT = ROOT / "build" / "usa" / "report.json"
-SYMBOLS = ROOT / "config" / "usa" / "arm9" / "symbols.txt"
+REPORT = project.REPORT
+SYMBOLS = project.SYMBOLS
 M2C = Path(os.environ.get("M2C_PATH", ROOT / "tools" / "m2c")) / "m2c.py"
 
 
@@ -45,7 +47,7 @@ def function_asm(name: str) -> str | None:
 def draft(name: str) -> str:
     asm = function_asm(name)
     if asm is None:
-        return f"/* {name}: not found in build/usa/asm (thumb function or wrong name?) */\n"
+        return f"/* {name}: not found in build/{project.VERSION}/asm (thumb function or wrong name?) */\n"
     tmp = DRAFTS / f"{name}.s"
     tmp.write_text(asm + "\n", encoding="utf-8")
     r = subprocess.run([sys.executable, str(M2C), "-t", "arm-mwcc-c", str(tmp)], capture_output=True, text=True)

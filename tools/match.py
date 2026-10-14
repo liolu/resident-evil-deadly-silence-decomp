@@ -18,8 +18,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-REPORT = ROOT / "build" / "usa" / "report.json"
-SYMBOLS = ROOT / "config" / "usa" / "arm9" / "symbols.txt"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import project  # noqa: E402  (this game's version, ROM name, paths: tools/project.py)
+REPORT = project.REPORT
+SYMBOLS = project.SYMBOLS
 README = ROOT / "README.md"
 SOURCE_DIRS = ["src", "include", "tools/probes"]
 
@@ -137,12 +139,12 @@ def cmd_verify(args):
     ok = True
     r = run(["ninja"])
     out = (r.stdout or "") + (r.stderr or "")
-    if r.returncode != 0 or "resident_evil_deadly_silence_usa.nds: OK" not in out:
+    if r.returncode != 0 or f"{project.ROM_NAME}: OK" not in out:
         print(out[-4000:])
         print("FAIL: ninja did not produce a matching ROM")
         ok = False
     else:
-        print("OK  : ROM is byte-identical (resident_evil_deadly_silence_usa.nds: OK)")
+        print(f"OK  : ROM is byte-identical ({project.ROM_NAME}: OK)")
     report = build_report()
     for u in source_units(report):
         if u["metadata"].get("complete"):

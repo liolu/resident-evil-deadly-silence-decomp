@@ -22,7 +22,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ASM_DIR = ROOT / "build" / "usa" / "asm"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import project  # noqa: E402  (this game's version, ROM name, paths: tools/project.py)
+ASM_DIR = project.ASM_DIR
 PERMUTER = Path(os.environ.get("PERMUTER_PATH", ROOT / "tools" / "decomp-permuter"))
 MWCC = Path(os.environ.get("MWCCARM", ROOT / "tools" / "mwccarm")) / "2.0" / "sp1p5" / "mwccarm.exe"
 CC_FLAGS = ("-O4,p -enum int -char signed -str noreuse -proc arm946e -gccext,on -fp soft -inline noauto "

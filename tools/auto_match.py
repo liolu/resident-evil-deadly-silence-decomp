@@ -31,12 +31,14 @@ from multiprocessing import Pool
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import project  # noqa: E402  (this game's version, ROM name, paths: tools/project.py)
 sys.path.insert(0, str(ROOT / "tools"))
 import probe_compiler as pc  # noqa: E402
 
-DELINKS = ROOT / "config" / "usa" / "arm9" / "delinks.txt"
-SYMBOLS = ROOT / "config" / "usa" / "arm9" / "symbols.txt"
-ASM_DIR = ROOT / "build" / "usa" / "asm"
+DELINKS = project.DELINKS
+SYMBOLS = project.SYMBOLS
+ASM_DIR = project.ASM_DIR
 AUTO_SRC = ROOT / "src" / "auto"
 WORK = ROOT / "build" / "auto"
 M2C = Path(os.environ.get("M2C_PATH", ROOT / "tools" / "m2c")) / "m2c.py"
@@ -45,9 +47,9 @@ MWCC_ROOT = Path(os.environ.get("MWCCARM", ROOT / "tools" / "mwccarm"))
 # (version, extra flags): profiles found in this game, most common first (see docs/compiler.md)
 COMPILERS = [("2.0/sp1p5", ""), ("1.2/sp2p3", ""), ("1.2/sp2p3", "-proc arm7tdmi")]
 MWCC = MWCC_ROOT / COMPILERS[0][0] / "mwccarm.exe"
-COMPILERS_TXT = ROOT / "config" / "usa" / "compilers.txt"
+COMPILERS_TXT = project.COMPILERS_TXT
 MARKER = "/* compiler: "
-MAIN_TEXT = (0x02000000, 0x02118edc)
+MAIN_TEXT = project.MAIN_TEXT
 CONTEXT = ROOT / "build" / "auto" / "m2c_context.c"
 
 
@@ -1005,6 +1007,8 @@ def main():
     ap.add_argument("--permute", type=int, default=0, metavar="N", help="Run the permuter on N near misses")
     ap.add_argument("--minutes", type=float, default=5.0, help="Permuter time per function")
     ap.add_argument("--dry-run", action="store_true", help="Only report, change nothing")
+    ap.add_argument("--cached-only", action="store_true",
+                    help="Do not try new functions: only integrate the matches already in the cache (resume)")
     args = ap.parse_args()
 
     if not M2C.exists():
@@ -1028,6 +1032,20 @@ def main():
     keys = {f[0]: cache_key(f) for f in todo}
     results = [cached[keys[f[0]]] for f in todo if keys[f[0]] in cached]
     pending = [f for f in todo if keys[f[0]] not in cached]
+    if args.cached_only:
+        # The asm text (part of the cache key) can change between dsd runs: in this mode take back the matches by
+        # name + size + address. Nothing is trusted blindly: verify and find_culprits check the result.
+        by_name = {}
+        for line in CACHE.read_text(encoding="utf-8", errors="replace").splitlines() if CACHE.exists() else []:
+            try:
+                r = tuple(json.loads(line)["r"])
+            except Exception:
+                continue
+            if r[3] == "match":
+                by_name[(r[0], r[1], r[2])] = r
+        have = {r[0] for r in results}
+        results += [by_name[f] for f in todo if f[0] not in have and f in by_name]
+        pending = []
     print(f"Trying {len(pending)} functions ({len(results)} already in the cache)...", flush=True)
     WORK.mkdir(parents=True, exist_ok=True)
     with Pool(args.j) as pool, CACHE.open("a", encoding="utf-8") as cache_out:
@@ -1044,15 +1062,21 @@ def main():
     print("Results: " + ", ".join(f"{k} {v}" for k, v in sorted(stats.items())))
 
     found = [(n, s, a, src) for n, s, a, st, src in results if st == "match"]
+    # Matches that broke the ROM once linked (find_culprits): known bad, not integrated again
+    bad = set((WORK / "culprits.txt").read_text(encoding="utf-8").split()) if (WORK / "culprits.txt").exists() else set()
+    if bad & {f[0] for f in found}:
+        print(f"Skipping {len(bad & {f[0] for f in found})} match(es) known to break the ROM (build/auto/culprits.txt)")
+        found = [f for f in found if f[0] not in bad]
     near = [(n, s, a, src) for n, s, a, st, src in results if st == "near"]
     WORK.mkdir(parents=True, exist_ok=True)
-    if (WORK / "near").exists():
-        shutil.rmtree(WORK / "near")
-    (WORK / "near").mkdir()
-    for n, s, a, src in near:
-        (WORK / "near" / f"{n}.c").write_text(src, encoding="utf-8")
-    (WORK / "status.json").write_text(json.dumps([r[:4] for r in results]))
-    print(f"{len(near)} near misses kept in {(WORK / 'near').relative_to(ROOT)}")
+    if not args.cached_only:  # a partial pass must not replace the full list of near misses (Qwen, permuter use it)
+        if (WORK / "near").exists():
+            shutil.rmtree(WORK / "near")
+        (WORK / "near").mkdir()
+        for n, s, a, src in near:
+            (WORK / "near" / f"{n}.c").write_text(src, encoding="utf-8")
+        (WORK / "status.json").write_text(json.dumps([r[:4] for r in results]))
+        print(f"{len(near)} near misses kept in {(WORK / 'near').relative_to(ROOT)}")
 
     if args.permute and near:
         print(f"Permuter on {min(args.permute, len(near))} near misses, {args.minutes} min each:")
@@ -1066,7 +1090,7 @@ def main():
     compilers_backup = COMPILERS_TXT.read_bytes() if COMPILERS_TXT.exists() else b""
     created = integrate(found)
     print(f"Added {len(created)} functions to src/auto/, verifying...")
-    subprocess.run([sys.executable, "tools/configure.py", "usa"], cwd=ROOT, check=True, capture_output=True)
+    subprocess.run([sys.executable, "tools/configure.py", project.VERSION], cwd=ROOT, check=True, capture_output=True)
     verify = subprocess.run([sys.executable, "tools/match.py", "verify"], cwd=ROOT, capture_output=True, text=True)
     for _ in range(8):
         bad = re.findall(r"FAIL: (src/auto/\S+?\.c) is marked complete", verify.stdout) if verify.returncode else []
@@ -1082,8 +1106,22 @@ def main():
             keep = [l for l in COMPILERS_TXT.read_text().splitlines(True) if l.split(" ")[0] not in bad]
             COMPILERS_TXT.write_text("".join(keep), newline="\n")
         created = [c for c in created if c.relative_to(ROOT).as_posix() not in bad]
-        subprocess.run([sys.executable, "tools/configure.py", "usa"], cwd=ROOT, check=True, capture_output=True)
+        subprocess.run([sys.executable, "tools/configure.py", project.VERSION], cwd=ROOT, check=True, capture_output=True)
         verify = subprocess.run([sys.executable, "tools/match.py", "verify"], cwd=ROOT, capture_output=True, text=True)
+    if verify.returncode != 0:
+        # Before throwing the whole run away, find the few files that break the ROM (one build, byte comparison)
+        import find_culprits
+        print("Verification failed: looking for the files that break the ROM...", flush=True)
+        new = {c.relative_to(ROOT).as_posix() for c in created}
+        ok, dropped = find_culprits.repair(allowed=new, log=lambda m: print(m, flush=True))
+        if dropped:
+            print(f"Dropped {len(dropped)} file(s) that break the ROM (kept in build/culprits/)")
+            created = [c for c in created if c.relative_to(ROOT).as_posix() not in dropped]
+            # Never retry them blindly: the cache keeps them as 'match', so mark them in a list auto_match skips
+            with (WORK / "culprits.txt").open("a", encoding="utf-8") as f:
+                f.writelines(Path(d).stem + "\n" for d in dropped)
+        if ok:
+            verify = subprocess.run([sys.executable, "tools/match.py", "verify"], cwd=ROOT, capture_output=True, text=True)
     print(verify.stdout.strip().splitlines()[-1] if verify.stdout else "")
     if verify.returncode != 0:
         print(verify.stdout[-3000:])
@@ -1094,7 +1132,7 @@ def main():
         COMPILERS_TXT.write_bytes(compilers_backup)
         for p in created:
             p.unlink()
-        subprocess.run([sys.executable, "tools/configure.py", "usa"], cwd=ROOT, capture_output=True)
+        subprocess.run([sys.executable, "tools/configure.py", project.VERSION], cwd=ROOT, capture_output=True)
         sys.exit(1)
     print(f"OK: {len(created)} new matching functions.")
 
