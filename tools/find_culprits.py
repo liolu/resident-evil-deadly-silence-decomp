@@ -125,6 +125,10 @@ def find(build_output: str) -> list[dict]:
     # A module older than the last change of the config was not relinked (the build stopped before): skip it.
     # (When nothing changed, ninja does not rewrite the modules: they are still up to date.)
     newest_config = max((p.stat().st_mtime for p in project.CONFIG.rglob("*.txt")), default=0)
+    for f, reason in map_overflows(newest_config):
+        add(f, reason)
+    for mod, addr, sym in shifted_symbols(build_output):
+        add("(no complete file)", f"{mod} shifted from 0x{addr:08x} ({sym}): something placed before it grew")
     for mod in modules():
         if mod["built"].stat().st_mtime < newest_config:
             add("(build)", f"{mod['name']} not relinked since the last config change: fix the build errors first")
@@ -145,6 +149,53 @@ def find(build_output: str) -> list[dict]:
             if not owners:
                 add("(no complete file)", f"{mod['name']} 0x{addr:08x}: {what}")
     return [{"file": f, "reasons": r} for f, r in found.items()]
+
+
+MAP_LINE = re.compile(r"^\s+[0-9A-Fa-f]{8} ([0-9A-Fa-f]{8}) (\.\w+)\s+\S+\t\((\S+?)\.o\)", re.M)
+
+
+def map_overflows(newest_config: float) -> list[tuple[str, str]]:
+    """[(file, reason)] for the `complete` files whose object brings more than delinks.txt declares, read from the
+    linker map: a section it does not declare (a `.bss` from a tentative definition, strings), or a section bigger
+    than its range. Such a file moves everything after it, so the byte comparison only sees the shift, not where it
+    starts (in this game the first difference is in Entry.c, which holds the module sizes)."""
+    xmap = project.BUILD / "arm9.o.xMAP"
+    if not xmap.exists() or xmap.stat().st_mtime < newest_config:
+        return []
+    declared = {}  # object stem -> (file, {section: size})
+    for mod in modules():
+        delinks = mod["delinks"]
+        if not delinks.exists():
+            continue
+        for m in BLOCK_RE.finditer(delinks.read_text(encoding="utf-8", errors="replace")):
+            if "complete" in m.group(2).split():
+                secs = {"." + n: int(e, 16) - int(s, 16) for n, s, e in SECTION_RE.findall(m.group(2))}
+                declared[Path(m.group(1)).stem] = (m.group(1), secs)
+    placed = {}  # object stem -> {section: bytes}
+    for size, sec, obj in MAP_LINE.findall(xmap.read_text(encoding="latin-1")):
+        if obj in declared and int(size, 16) and not sec.startswith((".debug", ".comment")):
+            placed.setdefault(obj, {}).setdefault(sec, 0)
+            placed[obj][sec] += int(size, 16)
+    out = []
+    for obj, secs in placed.items():
+        f, want = declared[obj]
+        for sec, n in secs.items():
+            if sec not in want:
+                out.append((f, f"brings 0x{n:x} bytes of {sec} that delinks.txt does not declare"))
+            elif n > want[sec]:
+                out.append((f, f"{sec} is 0x{n:x} bytes for a 0x{want[sec]:x} range"))
+    return out
+
+
+def shifted_symbols(build_output: str) -> list[tuple[str, int, str]]:
+    """[(module, first address, symbol)] of the modules where `dsd check symbols` finds a symbol at another address
+    (the whole module moved): helps to tell a file that grew in the module from something placed before it."""
+    first = {}
+    for m in re.finditer(r"Symbol '(\S+)' in (.+?) at 0x([0-9a-f]+) not found by address", build_output):
+        addr = int(m.group(3), 16)
+        if m.group(2) not in first or addr < first[m.group(2)][0]:
+            first[m.group(2)] = (addr, m.group(1))
+    return [(mod, a, s) for mod, (a, s) in sorted(first.items())]
 
 
 def committed_files() -> set[str]:
