@@ -1,0 +1,13 @@
+/* compiler: 1.2/sp2p3  */
+#include "m2c.h"
+#include "engine.h"
+
+void func_020e038c(void);
+void func_020e0398(void);
+void func_020e046c(void);
+
+void func_020e04d8(void) {
+    func_020e0398();
+    func_020e046c();
+    func_020e038c();
+}

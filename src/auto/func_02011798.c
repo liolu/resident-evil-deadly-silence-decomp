@@ -1,0 +1,20 @@
+/* compiler: 1.2/sp2p3  */
+#include "m2c.h"
+#include "engine.h"
+
+void func_0206fcf8(M2C_UNK, M2C_UNK, M2C_UNK, M2C_UNK);
+
+void func_02011798(s32 arg0, s32 arg1) {
+    u8 temp_r1;
+
+    M2C_FIELD(arg1, s16 *, 0x10) = (s16) (M2C_FIELD(arg1, s16 *, 0x10) + 0xA0);
+    M2C_FIELD(arg1, s32 *, 0) = (s32) (M2C_FIELD(arg1, s32 *, 0) - 0x800);
+    if (M2C_FIELD(arg1, u8 *, 0xE4) == 0xB) {
+        func_0206fcf8(0, 1, 1, 0x100);
+    }
+    temp_r1 = M2C_FIELD(arg1, u8 *, 0xE4);
+    M2C_FIELD(arg1, u8 *, 0xE4) = (u8) (temp_r1 - 1);
+    if (temp_r1 == 0) {
+        M2C_FIELD(arg0, s8 *, 4) = 2;
+    }
+}
