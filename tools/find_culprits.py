@@ -100,10 +100,45 @@ def diff_ranges(a: bytes, b: bytes) -> tuple[list[tuple[int, int]], bool]:
     return runs, shifted
 
 
+LOCAL_IMPORT = re.compile(r"Imported symbol (\.L_[0-9a-f]+) at 0x([0-9a-f]+) in (.+?) is local")
+
+
+def symbols_file(module: str) -> Path:
+    """symbols.txt of a module named like dsd prints it: ARM9 main, ITCM, DTCM, overlay 12."""
+    m = re.match(r"overlay (\d+)", module)
+    if m:
+        return project.ARM9 / "overlays" / f"ov{int(m.group(1)):03d}" / "symbols.txt"
+    return {"ITCM": project.ARM9 / "itcm" / "symbols.txt", "DTCM": project.ARM9 / "dtcm" / "symbols.txt"}.get(
+        module, project.SYMBOLS)
+
+
+def globalize_labels(build_output: str) -> int:
+    """When a new `complete` file splits the code, a function still in a gap object can point to a label that is now
+    in another object; dsd refuses (`Imported symbol .L_0204eb14 ... is local`) and the whole module fails to delink,
+    so every new file looks guilty. The label becomes a global one (lbl_0204eb14): same bytes, linkable."""
+    n = 0
+    for label, addr, module in set(LOCAL_IMPORT.findall(re.sub(r"\x1b\[[0-9;]*m", "", build_output))):
+        p = symbols_file(module)
+        if not p.exists():
+            continue
+        t = p.read_text(encoding="utf-8")
+        new = re.sub(rf"^{re.escape(label)} (kind:label\(\w+\) addr:0x{addr})(?: local)?[ \t]*$",
+                     rf"lbl_{addr} \1", t, flags=re.M)
+        if new != t:
+            p.write_text(new, encoding="utf-8", newline="\n")
+            n += 1
+    return n
+
+
 def build() -> str:
-    run([sys.executable, "tools/configure.py", project.VERSION])
-    r = run(["ninja"])
-    return (r.stdout or "") + (r.stderr or "")
+    """configure + ninja (labels that must be global are fixed on the way, see globalize_labels)."""
+    for _ in range(5):
+        run([sys.executable, "tools/configure.py", project.VERSION])
+        r = run(["ninja"])
+        out = (r.stdout or "") + (r.stderr or "")
+        if not globalize_labels(out):
+            return out
+    return out
 
 
 def find(build_output: str) -> list[dict]:

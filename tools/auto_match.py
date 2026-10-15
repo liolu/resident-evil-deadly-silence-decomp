@@ -3,6 +3,11 @@
 
     python tools/auto_match.py                       # scan every function that is not in a source file yet
     python tools/auto_match.py --permute 20 --minutes 5   # also run the permuter on 20 near misses
+    python tools/auto_match.py --neighbours a,b      # retry only the callers and callees of a, b (just matched)
+    python tools/auto_match.py --names a,b           # retry only these functions (cache ignored for them)
+
+A function that just matched gives its real signature to the context (gen_context.py reads src/): its callers and
+callees get better drafts, so `--neighbours` retries them even when the cache has a failure for them.
 
 For every ARM function of the main module that is not covered by delinks.txt:
   1. m2c generates a draft (`--valid-syntax`, types from include/m2c.h);
@@ -138,6 +143,21 @@ def function_asm(name: str) -> str | None:
         _ASM = "\n".join(f.read_text(encoding="utf-8") for f in ASM_DIR.glob("*.s"))
     m = re.search(rf"^{re.escape(name)}: .*?^\s+arm_func_end {re.escape(name)}$", _ASM, re.S | re.M)
     return m.group(0) if m else None
+
+
+def neighbours(names: set[str]) -> set[str]:
+    """Functions calling or called by `names` (bl / b / blx to a symbol, from the disassembly)."""
+    function_asm("")  # loads the disassembly
+    out = set()
+    for m in re.finditer(r"^(\w+): ; 0x[0-9a-f]+\n(.*?)^\s+arm_func_end \1$", _ASM, re.S | re.M):
+        callees = set(re.findall(r"^\s+(?:blx|bl|b)(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le)?\s+(\w+)\s*$",
+                                 m.group(2), re.M))
+        callees = {c for c in callees if not re.fullmatch(r"r\d+|lr|ip|sp|pc", c) and not c.startswith("_L")}
+        if m.group(1) in names:
+            out |= callees
+        elif callees & names:
+            out.add(m.group(1))
+    return out - names
 
 
 def restore_leading_args(source: str, name: str) -> str:
@@ -582,7 +602,23 @@ def variants(source: str, name: str) -> list[str]:
     out += typed_global_loads(source)
     # 13. Consecutive word copies are one struct assignment (`ldm`/`stm` in the game)
     out += struct_copy(source, name)
+    # 14. Method calls through a table of function pointers (C++ virtual calls, "objects" in C) pass the object
+    out += method_calls(source)
     return out
+
+
+METHOD_CALL = re.compile(r"M2C_FIELD\(\*(\w+), ([^,()]*\(\*\*\)\([^()]*\)), (0x[0-9A-Fa-f]+|\d+)\)\(([^()]*)\)")
+
+
+def method_calls(source: str) -> list[str]:
+    """`M2C_FIELD(*obj, T (**)(), 4)()` is `obj->vtable->f(obj)` in the game: the object stays in r0 and the function
+    pointer goes to r1 (`ldr r1, [r0]; ldr r1, [r1, #4]; blx r1`). m2c drops the object when the callee never names
+    it; give it back as the first argument (keeping the arguments m2c kept)."""
+    def add_self(m):
+        args = m.group(4).strip()
+        return f"M2C_FIELD(*{m.group(1)}, {m.group(2)}, {m.group(3)})({m.group(1)}{', ' + args if args else ''})"
+    fixed = METHOD_CALL.sub(add_self, source)
+    return [fixed] if fixed != source else []
 
 
 def accumulate(source: str) -> list[str]:
@@ -1010,6 +1046,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="Only report, change nothing")
     ap.add_argument("--cached-only", action="store_true",
                     help="Do not try new functions: only integrate the matches already in the cache (resume)")
+    ap.add_argument("--names", help="Only these functions (comma separated), tried again even if cached")
+    ap.add_argument("--neighbours", help="Only the callers and callees of these functions, tried again even if cached")
     args = ap.parse_args()
 
     if not M2C.exists():
@@ -1035,10 +1073,16 @@ def main():
     journal_end()
 
     todo = candidates()
+    focus = None  # --names / --neighbours: a few functions, retried because the context changed
+    if args.names or args.neighbours:
+        focus = set(args.names.split(",")) if args.names else set()
+        if args.neighbours:
+            focus |= neighbours(set(args.neighbours.split(",")))
+        todo = [f for f in todo if f[0] in focus]
     cached = load_cache()
     keys = {f[0]: cache_key(f) for f in todo}
-    results = [cached[keys[f[0]]] for f in todo if keys[f[0]] in cached]
-    pending = [f for f in todo if keys[f[0]] not in cached]
+    results = [cached[keys[f[0]]] for f in todo if keys[f[0]] in cached and (focus is None or cached[keys[f[0]]][3] == "match")]
+    pending = [f for f in todo if keys[f[0]] not in cached or (focus is not None and cached[keys[f[0]]][3] != "match")]
     if args.cached_only:
         # The asm text (part of the cache key) can change between dsd runs: in this mode take back the matches by
         # name + size + address. Nothing is trusted blindly: verify and find_culprits check the result.
@@ -1076,7 +1120,22 @@ def main():
         found = [f for f in found if f[0] not in bad]
     near = [(n, s, a, src) for n, s, a, st, src in results if st == "near"]
     WORK.mkdir(parents=True, exist_ok=True)
-    if not args.cached_only:  # a partial pass must not replace the full list of near misses (Qwen, permuter use it)
+    if focus is not None and not args.cached_only:
+        # Partial pass: update the near misses and the status of these functions only
+        (WORK / "near").mkdir(exist_ok=True)
+        for n, s, a, st, src in results:
+            p = WORK / "near" / f"{n}.c"
+            if st == "near":
+                p.write_text(src, encoding="utf-8")
+            elif st == "match":
+                p.unlink(missing_ok=True)
+        try:
+            old = json.loads((WORK / "status.json").read_text())
+        except Exception:
+            old = []
+        mine = {r[0]: list(r[:4]) for r in results}
+        (WORK / "status.json").write_text(json.dumps([mine.pop(r[0], r) for r in old] + list(mine.values())))
+    elif not args.cached_only:  # a partial pass must not replace the full list of near misses (Qwen, permuter use it)
         if (WORK / "near").exists():
             shutil.rmtree(WORK / "near")
         (WORK / "near").mkdir()

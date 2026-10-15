@@ -170,6 +170,50 @@ def game_symbols() -> dict[int, str]:
     return out
 
 
+# ---------------------------------------------------------------- data symbols created on demand
+
+_NEW_SYMS: dict[int, tuple[str, str]] = {}  # address -> (name, kind) of data symbols this run adds to symbols.txt
+_new_syms_lock = threading.Lock()
+_DATA_RANGES = None
+
+
+def data_ranges() -> list[tuple[int, int, str]]:
+    """[(start, end, kind)] of the .data/.rodata/.bss sections of the main module (delinks.txt header)."""
+    global _DATA_RANGES
+    if _DATA_RANGES is None:
+        _DATA_RANGES = []
+        head = project.DELINKS.read_text(encoding="utf-8").split("\n\n", 1)[0]
+        for m in re.finditer(r"start:0x([0-9a-f]+) end:0x([0-9a-f]+) kind:(\w+)", head):
+            if m.group(3) in ("data", "rodata", "bss"):
+                _DATA_RANGES.append((int(m.group(1), 16), int(m.group(2), 16), m.group(3)))
+    return _DATA_RANGES
+
+
+def data_symbol(addr: int, syms: dict[int, str]) -> str | None:
+    """A game symbol for a data address the donor's code loads (a variable, a table...) when the game has none yet:
+    data_<address>, added to symbols.txt with the matches that use it. None outside the module's data."""
+    for start, end, kind in data_ranges():
+        if start <= addr < end:
+            with _new_syms_lock:
+                if addr not in syms:
+                    name = f"data_{addr:08x}"
+                    _NEW_SYMS[addr] = (name, "bss" if kind == "bss" else "data(any)")
+                    syms[addr] = name
+                return syms[addr]
+    return None
+
+
+def add_new_symbols(sources: list[str]) -> int:
+    """Writes to symbols.txt the data symbols created for these sources. Returns how many."""
+    text = "\n".join(sources)
+    lines = [f"{name} kind:{kind} addr:0x{addr:08x}\n" for addr, (name, kind) in sorted(_NEW_SYMS.items())
+             if re.search(rf"\b{name}\b", text)]
+    if lines:
+        with project.SYMBOLS.open("a", encoding="utf-8", newline="\n") as f:
+            f.writelines(lines)
+    return len(lines)
+
+
 def inner_entries() -> dict[int, int]:
     """{address: calling address} of the places of the main module reached from elsewhere other than a function
     start: calls and jumps (relocs.txt of every module) and labels (symbols.txt). A function holding one cannot come
@@ -270,6 +314,8 @@ def rename_map(dn, row, addr: int, target: bytes, syms: dict[int, str], our_name
         else:
             return {}, f"relocation type {rtype}"
         name = syms.get(dest) or syms.get(dest & ~1)
+        if name is None and rtype == donorlib.R_ARM_ABS32:
+            name = data_symbol(dest, syms)
         if name is None:
             return {}, f"no game symbol at 0x{dest:08x} for {sym}"
         if out.get(sym, name) != name:
@@ -405,6 +451,8 @@ def internal_rename(g: Path, idx: dict, d_addr: int, d_name: str, addr: int, siz
             if dv == tv:
                 continue  # a constant, not an address
             return {}, f"no symbol at 0x{dv:08x} in {g.name}"
+        if tn is None and i in pool:
+            tn = data_symbol(tv, syms)
         if tn is None:
             return {}, f"no game symbol at 0x{tv:08x} (for {dn_})"
         if out.get(dn_, tn) != tn:
@@ -763,7 +811,10 @@ def main():
     delinks_backup = project.DELINKS.read_bytes()
     compilers_backup = project.COMPILERS_TXT.read_bytes() if project.COMPILERS_TXT.exists() else b""
     # Killed before the end (job cancelled): the next run puts these files back and deletes the new sources
-    journal_begin([project.DELINKS, project.COMPILERS_TXT])
+    journal_begin([project.DELINKS, project.COMPILERS_TXT, project.SYMBOLS])
+    n_syms = add_new_symbols([f[3] for f in found])
+    if n_syms:
+        print(f"{n_syms} data symbols added to symbols.txt for these functions", flush=True)
     entries = integrate(found)
     journal_created([ROOT / rel for rel in entries])
     # The game repos check clang-format in CI: format now, the verification below covers the formatted files

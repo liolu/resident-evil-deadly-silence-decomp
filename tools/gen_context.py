@@ -29,12 +29,24 @@ BUILTIN = {"void", "char", "short", "int", "long", "float", "double", "signed", 
 DEFINITION = re.compile(r"^(?!static\b|asm\b)([A-Za-z_][\w \*]*?)\b(\w+)\(([^()]*)\) \{$", re.M)
 
 
+def engine_types() -> set[str]:
+    """Type names include/engine.h defines (typedefs, structs): m2c gets engine.h as context too, so prototypes using
+    them stay precise. Matched functions with such types teach their callers and callees the real layout."""
+    p = ROOT / "include" / "engine.h"
+    text = p.read_text(encoding="utf-8") if p.exists() else ""
+    names = set(re.findall(r"\btypedef\b[^;{]*?\b(\w+)\s*;", text)) | set(re.findall(r"\}\s*(\w+)\s*;", text))
+    return names | {"struct", "union", "enum"} | set(re.findall(r"\b(?:struct|union|enum)\s+(\w+)\s*\{", text))
+
+
+KNOWN = BUILTIN | engine_types()
+
+
 def simplify(decl: str) -> str | None:
-    """Keeps a type made of built-in words, maps other pointers to `void *`; None if not representable."""
+    """Keeps a type made of built-in or engine.h words, maps other pointers to `void *`; None if not representable."""
     decl = decl.strip()
     words = re.findall(r"[A-Za-z_]\w*", decl.replace("*", " "))
     stars = decl.count("*")
-    if all(w in BUILTIN for w in words):
+    if all(w in KNOWN for w in words):
         return decl
     return "void *" if stars else None
 
