@@ -5,7 +5,7 @@
     python tools/match.py worklist [-n 20]    # unmatched functions in delinked files, smallest first
     python tools/match.py check FUNCTION      # rebuild, print the function's match % (and diff with --diff)
     python tools/match.py verify              # strict gate: ROM OK, complete files at 100%, ASCII sources
-    python tools/match.py progress            # rewrite the progress table in README.md
+    python tools/match.py progress            # rewrite the progress table in README.md (no build needed)
 
 `verify` exits with a non-zero code on any failure. Automated sessions must not commit unless it passes.
 """
@@ -191,10 +191,60 @@ def part_of(path: str) -> str:
     return f"Game code: `{'/'.join(parts[:2])}/`" if len(parts) > 2 else "Game code"
 
 
+def config_report() -> dict:
+    """The same measures as objdiff's report.json, read from the configuration only (delinks.txt + symbols.txt of
+    every module): a function is matched when it lies in a `complete` file. Seconds instead of a full build, and
+    exact as long as `match.py verify` passed on these files."""
+    func_re = re.compile(r"^\S+ kind:function\((?:arm|thumb),size=0x([0-9a-f]+)\) addr:0x([0-9a-f]+)", re.M)
+    block_re = re.compile(r"^(\S+):\n((?:[ \t]+.*\n?)*)", re.M)
+    sec_re = re.compile(r"\.(\w+)\s+start:0x([0-9a-f]+) end:0x([0-9a-f]+)")
+    units, total_code, matched_code, total_fn, matched_fn = [], 0, 0, 0, 0
+    total_data = matched_data = 0
+    for delinks in sorted(project.CONFIG.rglob("delinks.txt")):
+        symbols = delinks.with_name("symbols.txt")
+        if not symbols.exists():
+            continue
+        text = delinks.read_text(encoding="utf-8")
+        head = text.split("\n\n", 1)[0]
+        total_data += sum(int(e, 16) - int(st, 16) for name, st, e in sec_re.findall(head)
+                          if name in ("data", "rodata"))
+        funcs = [(int(a, 16), int(sz, 16)) for sz, a in func_re.findall(symbols.read_text(encoding="utf-8"))]
+        total_code += sum(sz for _, sz in funcs)
+        total_fn += len(funcs)
+        for m in block_re.finditer(text):
+            path, body = m.group(1), m.group(2)
+            if not path.startswith("src/") or "complete" not in body.split():
+                continue
+            secs = sec_re.findall(body)
+            inside = [sz for a, sz in funcs if any(n == "text" and int(st, 16) <= a < int(e, 16) for n, st, e in secs)]
+            matched_data += sum(int(e, 16) - int(st, 16) for n, st, e in secs if n in ("data", "rodata"))
+            matched_code += sum(inside)
+            matched_fn += len(inside)
+            units.append({"name": path, "metadata": {"source_path": path, "complete": True},
+                          "measures": {"matched_functions": len(inside), "total_functions": len(inside),
+                                       "matched_code": sum(inside)}})
+    measures = {"total_code": total_code, "matched_code": matched_code,
+                "matched_code_percent": 100 * matched_code / total_code if total_code else 0,
+                "total_data": total_data, "matched_data": matched_data,
+                "matched_data_percent": 100 * matched_data / total_data if total_data else 0,
+                "total_functions": total_fn, "matched_functions": matched_fn}
+    return {"measures": measures, "units": units}
+
+
+def fresh_report() -> bool:
+    """report.json is newer than every delinks.txt / symbols.txt."""
+    if not REPORT.exists():
+        return False
+    newest = max((q.stat().st_mtime for q in project.CONFIG.rglob("*.txt")), default=0)
+    return REPORT.stat().st_mtime >= newest
+
+
 def cmd_progress(args):
-    """Writes the progress section of README.md (created after the introduction when missing)."""
+    """Writes the progress section of README.md (created after the introduction when missing). Without --rebuild,
+    objdiff's report.json is used when it is up to date, else the measures are read from the configuration
+    (config_report: no build)."""
     import datetime
-    report = load_report(args.rebuild)
+    report = load_report(True) if args.rebuild else (load_report(False) if fresh_report() else config_report())
     m = report["measures"]
     code, data = pct(m, "matched_code_percent"), pct(m, "matched_data_percent")
     parts = {}
