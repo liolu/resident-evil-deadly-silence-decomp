@@ -12,6 +12,7 @@ objdiff.json
 /objdiff-cli.exe
 /dsd
 /dsd.exe
+/dsd-dsi.exe
 /dsd.pdb
 build.ninja
 .ninja_log*
