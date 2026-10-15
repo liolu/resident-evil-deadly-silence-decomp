@@ -47,9 +47,21 @@ LIB_HINT = re.compile(r"(^|/)(libs?|libraries|sdk|msl|MSL\w*|runtime|ansi|nitro|
 C_LIB = re.compile(r"(^|/)(MSL\w*|msl|c|ansi|math|Runtime|runtime)(/|$)")
 
 
+_NAMES: dict = {}
+
+
+def _names_index(con) -> dict[str, list[tuple[str, str]]]:
+    """{donor function name: [(repo, file)]}, read once (the database has no index on names)."""
+    if not _NAMES:
+        _NAMES[""] = []
+        for name, repo, f in con.execute("SELECT DISTINCT name, repo, file FROM fn"):
+            _NAMES.setdefault(name, []).append((repo, f))
+    return _NAMES
+
+
 def original_file(con, name: str) -> str | None:
     """Where a function is defined in the SDK / libraries, as a path of this game: src/nitro/os/os_thread.c."""
-    rows = con.execute("SELECT DISTINCT repo, file FROM fn WHERE name=?", (name,)).fetchall()
+    rows = _names_index(con).get(name, ())
     for repo, f in rows:
         if repo in SDK_DIRS:
             m = re.match(r"(?:libraries|build/libraries)/(\w+)/(?:\w+/)*?src/(.+\.c)$", f)

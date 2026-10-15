@@ -350,6 +350,55 @@ def build() -> str:
     return (r.stdout or "") + (r.stderr or "")
 
 
+DRAFT_DIRS = ("build/auto/near", "build/drafts", "build/qwen_auto")
+
+
+def rename_drafts(renames: dict[str, str]) -> int:
+    """The work files of auto_match and Qwen (build/auto/near/<name>.c, build/drafts/, build/qwen_auto/) are looked
+    up by function name and call other functions by name: they follow the renames too, file names included.
+    build/donor/hits.json (the Studio's "Portable" level) too. Returns the number of files changed."""
+    if not renames:
+        return 0
+    rx = word_re(renames)
+    n = 0
+    for d in DRAFT_DIRS:
+        folder = ROOT / d
+        for f in sorted(folder.glob("*.c")) if folder.exists() else []:
+            t = f.read_text(encoding="utf-8", errors="surrogateescape")
+            new_t = rx.sub(lambda m: renames[m.group(1)], t)
+            dest = f.with_name(renames[f.stem] + ".c") if f.stem in renames else f
+            if new_t == t and dest == f:
+                continue
+            if dest != f and dest.exists():
+                continue  # a draft under the new name already exists: keep it
+            dest.write_text(new_t, encoding="utf-8", errors="surrogateescape", newline="")
+            if dest != f:
+                f.unlink()
+            n += 1
+    hits = ROOT / "build" / "donor" / "hits.json"
+    if hits.exists():
+        try:
+            d = json.loads(hits.read_text(encoding="utf-8"))
+            hits.write_text(json.dumps({renames.get(k, k): v for k, v in d.items()}, indent=0), encoding="utf-8")
+        except ValueError:
+            pass
+    return n
+
+
+def all_renamed() -> dict[str, str]:
+    """Every rename of the past runs (build/names/renamed.tsv), chained: func_x -> A -> B gives func_x -> B."""
+    f = WORK / "renamed.tsv"
+    out = {}
+    for line in f.read_text(encoding="utf-8").splitlines() if f.exists() else []:
+        if "\t" in line:
+            old, new = line.split("\t", 1)
+            for k, v in out.items():
+                if v == old:
+                    out[k] = new
+            out[old] = new
+    return out
+
+
 def undo(saved: dict[Path, bytes], created: list[Path]) -> None:
     for p in created:
         p.unlink(missing_ok=True)
@@ -363,7 +412,13 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="Only write build/names/names.tsv")
     ap.add_argument("--max", type=int, default=0, help="Rename at most N symbols (0 = all)")
     ap.add_argument("--rounds", type=int, default=8, help="Rebuilds at most to give up the names that break the ROM")
+    ap.add_argument("--drafts", action="store_true",
+                    help="Only rename the work files of auto_match / Qwen after the renames already done")
     args = ap.parse_args()
+    if args.drafts:
+        WORK.mkdir(parents=True, exist_ok=True)
+        print(f"{rename_drafts(all_renamed())} work files renamed")
+        return
     if not DB.exists():
         raise SystemExit(f"No donor database at {DB}: run `python tools/donors.py index` in decomp ds/ first.")
     WORK.mkdir(parents=True, exist_ok=True)
@@ -437,6 +492,8 @@ def main():
             f.write(f"{old}\t{new}\n")
     if not renames:
         sys.exit(1)
+    n = rename_drafts(renames)
+    print(f"{n} work files of auto_match / Qwen (build/auto/near, build/drafts, build/qwen_auto) follow the renames")
     print(f"OK: {len(renames)} symbols renamed, ROM identical (build/names/renamed.tsv). "
           f"Run `python tools/match.py verify` before committing.")
 
@@ -444,7 +501,7 @@ def main():
 if __name__ == "__main__":
     from pipeline_lock import pipeline_lock
 
-    if "--dry-run" in sys.argv:
+    if "--dry-run" in sys.argv or "--drafts" in sys.argv:
         main()  # reads only: no need to wait for a running pipeline
     else:
         with pipeline_lock("names"):
