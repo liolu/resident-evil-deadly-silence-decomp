@@ -327,6 +327,19 @@ def apply(groups, log=print) -> tuple[dict[Path, bytes], list[Path]]:
     return saved, created
 
 
+def clang_format(paths) -> None:
+    """The game repos check clang-format in CI: a longer name or a merge changes the layout of the file."""
+    import subprocess
+    rels = sorted({Path(p).resolve().relative_to(ROOT).as_posix() for p in paths
+                   if Path(p).exists() and Path(p).suffix in (".c", ".h", ".cpp", ".hpp")})
+    try:
+        for k in range(0, len(rels), 200):
+            subprocess.run(["pre-commit", "run", "clang-format", "--files", *rels[k:k + 200]], cwd=ROOT,
+                           capture_output=True)
+    except OSError:
+        print("pre-commit not found: files left unformatted")
+
+
 def undo(saved, created):
     for p in created:
         p.unlink(missing_ok=True)
@@ -372,6 +385,7 @@ def main():
         for rnd in range(args.rounds + 1):
             saved, created = apply(groups)
             journal_created(created)
+            clang_format(created)
             print(f"Wrote {len(created)} files, rebuilding the ROM...", flush=True)
             out = fc.build()
             if fc.rom_ok(out):

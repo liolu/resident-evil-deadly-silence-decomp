@@ -399,6 +399,23 @@ def all_renamed() -> dict[str, str]:
     return out
 
 
+def sources_of(paths) -> list:
+    return [p for p in paths if ROOT / "src" in Path(p).parents or ROOT / "include" in Path(p).parents]
+
+
+def clang_format(paths) -> None:
+    """The game repos check clang-format in CI: a longer name or a merge changes the layout of the file."""
+    import subprocess
+    rels = sorted({Path(p).resolve().relative_to(ROOT).as_posix() for p in paths
+                   if Path(p).exists() and Path(p).suffix in (".c", ".h", ".cpp", ".hpp")})
+    try:
+        for k in range(0, len(rels), 200):
+            subprocess.run(["pre-commit", "run", "clang-format", "--files", *rels[k:k + 200]], cwd=ROOT,
+                           capture_output=True)
+    except OSError:
+        print("pre-commit not found: files left unformatted")
+
+
 def undo(saved: dict[Path, bytes], created: list[Path]) -> None:
     for p in created:
         p.unlink(missing_ok=True)
@@ -451,6 +468,7 @@ def main():
     journal_begin([p for p in touched if p.exists()])
     _saved, created, uses = apply(renames)
     journal_created(created)
+    clang_format(sources_of(list(_saved) + created))
     print(f"Renamed {len(renames)} symbols in {len(_saved)} files, rebuilding the ROM...", flush=True)
     try:
         for rnd in range(args.rounds + 1):
@@ -480,7 +498,7 @@ def main():
             # only the files that use these names change again: the next build is incremental
             print(f"  giving up {len(bad)} names used by these files, rebuilding...", flush=True)
             back = {renames[n]: n for n in bad}
-            apply(back)
+            clang_format(sources_of(apply(back)[0]))
             rejected |= set(back)
             renames = {k: v for k, v in renames.items() if k not in bad}
             uses = current_uses(renames)
