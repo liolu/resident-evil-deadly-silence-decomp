@@ -164,36 +164,74 @@ def cmd_verify(args):
     sys.exit(0 if ok else 1)
 
 
+PARTS = [  # (path prefix, label) of the progress table, first match wins
+    ("src/nitro/", "NitroSDK (Nintendo's system library)"),
+    ("src/nnsys/", "NitroSystem (Nintendo's middleware)"),
+    ("src/wifi/", "NitroWiFi"),
+    ("src/dwc/", "NitroDWC (Wi-Fi Connection)"),
+    ("src/vct/", "libvct"),
+    ("src/msl/", "MSL (C standard library)"),
+    ("src/lib/", "Other libraries"),
+    ("src/donor/", "Reused from other decompilations, not merged into files yet"),
+    ("src/auto/", "Auto-matched (raw m2c output, to clean up)"),
+]
+STUDIO_URL = "https://github.com/liolu/ds-decomp-studio"
+
+
+def bar(percent: float, width: int = 20) -> str:
+    full = round(percent / 100 * width)
+    return "`" + "█" * full + "░" * (width - full) + "`"
+
+
+def part_of(path: str) -> str:
+    for prefix, label in PARTS:
+        if path.startswith(prefix):
+            return label
+    parts = path.split("/")
+    return f"Game code: `{'/'.join(parts[:2])}/`" if len(parts) > 2 else "Game code"
+
+
 def cmd_progress(args):
+    """Writes the progress section of README.md (created after the introduction when missing)."""
+    import datetime
     report = load_report(args.rebuild)
     m = report["measures"]
-    lines = ["<!-- progress:start -->",
-             f"**Code:** {pct(m, 'matched_code_percent'):.2f}% · **Data:** {pct(m, 'matched_data_percent'):.2f}% · "
-             f"**Functions:** {m.get('matched_functions', 0)}/{m['total_functions']}",
-             "",
-             "| File | Code | Functions | Status |",
-             "|---|---|---|---|"]
-    units = sorted(source_units(report), key=lambda u: u["metadata"].get("source_path", ""))
-    auto = [u for u in units if u["metadata"].get("source_path", "").startswith("src/auto/")]
-    for u in units:
-        if u in auto:
-            continue
+    code, data = pct(m, "matched_code_percent"), pct(m, "matched_data_percent")
+    parts = {}
+    for u in source_units(report):
+        path = u["metadata"].get("source_path", u["name"])
         um = u["measures"]
-        state = "✅ complete" if u["metadata"].get("complete") else "🚧 in progress"
-        lines.append(f"| `{u['metadata'].get('source_path', u['name'])}` | {pct(um, 'matched_code_percent'):.1f}% | "
-                     f"{um.get('matched_functions', 0)}/{um.get('total_functions', 0)} | {state} |")
-    if auto:
-        done = sum(int(u["measures"].get("matched_functions", 0)) for u in auto)
-        total = sum(int(u["measures"].get("total_functions", 0)) for u in auto)
-        lines.append(f"| `src/auto/` ({len(auto)} files, raw m2c output) | – | {done}/{total} | "
-                     f"🤖 auto-matched, to clean up |")
-    lines.append("<!-- progress:end -->")
+        row = parts.setdefault(part_of(path), [0, 0, 0, 0])
+        row[0] += 1
+        row[1] += int(um.get("matched_functions", 0))
+        row[2] += int(um.get("total_functions", 0))
+        row[3] += int(um.get("matched_code", 0) or 0)
+    total_code = int(m.get("total_code", 0) or 0)
+    lines = ["<!-- progress:start -->",
+             f"{bar(code)} **{code:.2f}%** of the code matched · data {data:.2f}% · "
+             f"{m.get('matched_functions', 0)}/{m['total_functions']} functions",
+             "",
+             "| Part of the code | Files | Functions | Share of all code |",
+             "|---|---|---|---|"]
+    for label, (files, done, total, matched) in sorted(parts.items(), key=lambda kv: -kv[1][3]):
+        share = 100 * matched / total_code if total_code else 0
+        lines.append(f"| {label} | {files} | {done}/{total} | {share:.2f}% |")
+    lines += ["",
+              f"*Updated {datetime.date.today().isoformat()} by `python tools/match.py progress` "
+              f"([DS Decomp Studio]({STUDIO_URL})). A function counts only when it compiles to the exact same bytes "
+              f"and the ROM still rebuilds byte for byte.*",
+              "<!-- progress:end -->"]
+    block = "\n".join(lines)
     text = README.read_text(encoding="utf-8")
-    new = re.sub(r"<!-- progress:start -->.*?<!-- progress:end -->", "\n".join(lines), text, flags=re.S)
-    if new == text and "<!-- progress:start -->" not in text:
-        raise SystemExit("README.md has no <!-- progress:start --> marker")
+    if "<!-- progress:start -->" in text:
+        new = re.sub(r"<!-- progress:start -->.*?<!-- progress:end -->", lambda _m: block, text, flags=re.S)
+    else:
+        # after the introduction: before the first code block or second-level title
+        mm = re.search(r"^(```|## )", text, re.M)
+        at = mm.start() if mm else len(text)
+        new = text[:at].rstrip("\n") + "\n\n## Progress\n\n" + block + "\n\n" + text[at:]
     README.write_text(new, encoding="utf-8", newline="\n")
-    print("README.md progress table updated")
+    print(f"README.md progress updated: {code:.2f}% code, {m.get('matched_functions', 0)}/{m['total_functions']} functions")
 
 
 def main():
