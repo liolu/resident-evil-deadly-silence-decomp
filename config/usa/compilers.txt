@@ -1062,3 +1062,53 @@ src/auto/func_02110048.c 1.2/sp2p3
 src/auto/func_0211027c.c 1.2/sp2p3
 src/auto/func_0211035c.c 1.2/sp2p3
 src/auto/func_02110500.c 1.2/sp2p3
+src/donor/func_02000920.c 2.0/sp1p5
+src/donor/func_0200d4f4.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020555a4.c 2.0/sp1p5
+src/donor/func_02070088.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_0207897c.c 2.0/sp1p5
+src/donor/func_0208658c.c 2.0/sp1p5
+src/donor/func_0208af50.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020b5808.c 2.0/sp1p5 -O4,p -lang c99 -ipa file -inline on,noauto
+src/donor/func_020b5818.c 2.0/sp1p5 -O4,p -lang c99 -ipa file -inline on,noauto
+src/donor/func_020dbb28.c 2.0/sp1p5 -O4,p -lang c99 -ipa file -inline on,noauto
+src/donor/func_020dd488.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020dd4b8.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020dea60.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e2158.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e2200.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e2d1c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e426c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e429c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e43d8.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e4430.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e451c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e86b8.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020e8764.c 2.0/sp1p5 -O4,p -lang c99 -ipa file -inline on,noauto
+src/donor/func_020f27c8.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2834.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f289c.c 2.0/sp1p5 -O4,p -lang c99 -ipa file -inline on,noauto
+src/donor/func_020f298c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2a28.c 2.0/sp1p5
+src/donor/func_020f2a50.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2c18.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2c68.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2cb4.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2dac.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2e70.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f2f38.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f30cc.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3150.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3244.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f32ac.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3408.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f354c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f35e0.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3834.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f38c4.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3a40.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3a98.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3c40.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3ca0.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3d0c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
+src/donor/func_020f3d8c.c 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto
