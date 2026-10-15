@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_020d9d64(void);
 void func_020dd470(void);
@@ -31,7 +31,7 @@ void func_020ded2c(void) {
     s32 var_r6;
     s8 *var_r5;
 
-    temp_r1 = data_0214f304 - 1;
+    temp_r1       = data_0214f304 - 1;
     data_0214f304 = temp_r1;
     if (temp_r1 != 0) {
         return;

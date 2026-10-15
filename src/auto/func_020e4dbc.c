@@ -34,7 +34,7 @@ s32 func_020e4dbc(void *arg0, s32 arg1, s32 arg2) {
     M2C_FIELD(arg0, s32 *, 0x6C) = 1;
     M2C_FIELD(arg0, s32 *, 0x70) = 0;
     M2C_FIELD(arg0, s32 *, 0x48) = arg2;
-    M2C_FIELD(arg0, s8 *, 1) = 2;
+    M2C_FIELD(arg0, s8 *, 1)     = 2;
     func_020e4a9c();
     return M2C_FIELD(arg0, s32 *, 0x60);
 }

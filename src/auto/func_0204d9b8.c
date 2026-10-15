@@ -47,10 +47,10 @@ void func_0204d9b8(void *arg0) {
             temp_r1 = M2C_FIELD(arg0, void **, 0x9C);
             if (M2C_FIELD(temp_r1, u8 *, 0x17E) == 0) {
                 M2C_FIELD(temp_r1, s8 *, 0x18F) = 1;
-                M2C_FIELD(arg0, s8 *, 0x90) = 1;
-                M2C_FIELD(arg0, s8 *, 0x91) = 1;
-                M2C_FIELD(arg0, s8 *, 0x92) = 3;
-                M2C_FIELD(arg0, s8 *, 0x93) = 0;
+                M2C_FIELD(arg0, s8 *, 0x90)     = 1;
+                M2C_FIELD(arg0, s8 *, 0x91)     = 1;
+                M2C_FIELD(arg0, s8 *, 0x92)     = 3;
+                M2C_FIELD(arg0, s8 *, 0x93)     = 0;
             }
         }
     }

@@ -26,7 +26,7 @@ extern M2C_UNK func_020a42ec;
 extern M2C_UNK func_020a49a8;
 
 void func_020a4c48(void) {
-    *(u16 *)0x04000304 &= ~0x8000;
+    *(u16 *) 0x04000304 &= ~0x8000;
     func_020ff204(1, 0, 0);
     func_0200f7f0(4);
     func_0200f768(0x12);
@@ -36,7 +36,8 @@ void func_020a4c48(void) {
     func_020038b8(&data_021214c4);
     func_02005fcc(&data_0212140c);
     func_020a4610();
-    M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), s32 *, 4) = (s32) *((M2C_UNK *)((s8 *)&data_02121460 + (M2C_FIELD(&data_0213ad48, u8 *, 3) * 4)));
+    M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), s32 *, 4) =
+        (s32) * ((M2C_UNK *) ((s8 *) &data_02121460 + (M2C_FIELD(&data_0213ad48, u8 *, 3) * 4)));
     func_02013638(0, 0, M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), s32 *, 4));
     func_020b842c(4, 2);
     func_020c4798(1);

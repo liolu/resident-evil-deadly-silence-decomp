@@ -9,7 +9,7 @@ s32 func_02110500(void *arg0, M2C_UNK arg1, s32 arg2) {
     u32 temp_r2;
 
     temp_r3 = M2C_FIELD(arg0, s32 *, 8);
-    var_r5 = arg2;
+    var_r5  = arg2;
     temp_r2 = M2C_FIELD(arg0, u32 *, 4);
     if ((u32) (temp_r3 + var_r5) > temp_r2) {
         var_r5 = temp_r2 - temp_r3;

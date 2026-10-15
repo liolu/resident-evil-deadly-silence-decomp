@@ -12,17 +12,17 @@ s32 func_02006ac8(s32 arg0) {
 
     var_r0_2 = arg0;
     switch (var_r0_2) {                             /* irregular */
-    case 0:
-        var_r0_2 = func_0210a934();
-        if (var_r0_2 == 0) {
-            M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) & ~1);
-        } else {
-            M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) | 1);
-        }
-        break;
-    case 1:
-        var_r0_2 = func_0210a978(&func_0200731c, 0);
-        break;
+        case 0:
+            var_r0_2 = func_0210a934();
+            if (var_r0_2 == 0) {
+                M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) & ~1);
+            } else {
+                M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) | 1);
+            }
+            break;
+        case 1:
+            var_r0_2 = func_0210a978(&func_0200731c, 0);
+            break;
     }
     if (var_r0_2 != 0) {
         var_r0 = 1;

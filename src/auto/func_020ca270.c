@@ -50,8 +50,8 @@ void func_020ca270(void) {
     func_0200f9b8(0x20, 0xB, 0xE0, 0x8E);
     func_0200fa84(0xC, 0);
     func_0200fa10(0x1A, 0);
-    *(s32 *)0x04000000 = (*(s32 *)0x04000000 & ~0xE000) | 0x2000;
-    M2C_FIELD(&data_0213af7c, s8 *, 0x20) = 1;
+    *(s32 *) 0x04000000                    = (*(s32 *) 0x04000000 & ~0xE000) | 0x2000;
+    M2C_FIELD(&data_0213af7c, s8 *, 0x20)  = 1;
     M2C_FIELD(&data_0213af7c, s16 *, 0x28) = 0x28;
     func_020c36b8(0x97, 0);
     func_020c4798(1);

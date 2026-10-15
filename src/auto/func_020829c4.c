@@ -14,6 +14,6 @@ void func_020829c4(void **arg0) {
     } else {
         M2C_FIELD(temp_r1, s8 *, 0x93) = 1;
     }
-    temp_r1_2 = *arg0;
+    temp_r1_2                        = *arg0;
     M2C_FIELD(temp_r1_2, u8 *, 0x92) = (u8) (M2C_FIELD(temp_r1_2, u8 *, 0x92) + 1);
 }

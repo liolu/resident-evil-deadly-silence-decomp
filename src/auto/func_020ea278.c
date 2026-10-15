@@ -52,12 +52,12 @@ void func_020ea278(void *arg0, s32 arg1, s32 arg2) {
         return;
     }
     M2C_FIELD(temp_r6, volatile s32 *, 0xB4) = temp_r0;
-    data_0214f780 = &func_020ea1cc;
-    data_0214efc4 = &func_020ea0c8;
-    data_0214efb8 = &func_020ea1b4;
-    data_0214efbc = &func_020ea1c0;
-    data_0214efc0 = &func_020ec258;
-    data_0214efd4 = &func_020ebecc;
+    data_0214f780                            = &func_020ea1cc;
+    data_0214efc4                            = &func_020ea0c8;
+    data_0214efb8                            = &func_020ea1b4;
+    data_0214efbc                            = &func_020ea1c0;
+    data_0214efc0                            = &func_020ec258;
+    data_0214efd4                            = &func_020ebecc;
     func_020ebefc(temp_r0, M2C_FIELD(temp_r4, volatile s32 *, 0x50), M2C_FIELD(temp_r4, volatile s32 *, 0x54));
     func_020e6618();
 }

@@ -18,16 +18,16 @@ s32 func_0205b478(void) {
 
     var_r4 = 1;
     func_02056fb0(0x1C);
-    temp_ip = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) & ~0x20000;
-    temp_lr = temp_ip & ~0x10000;
+    temp_ip                                = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) & ~0x20000;
+    temp_lr                                = temp_ip & ~0x10000;
     M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = temp_ip;
     M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = temp_lr;
     M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = (s32) (temp_lr & ~0x100000);
     M2C_FIELD(&data_0213daa8, u16 *, 0x74) = (u16) (M2C_FIELD(&data_0213daa8, u16 *, 0x74) | 0x14F);
     if (func_020b39e4(&data_0213be88, 0xE) != 0) {
-        M2C_FIELD(&data_02121340, M2C_UNK (**)(M2C_UNK *), 0x10)(&data_021483d4);
-        var_r4 = 0;
-        temp_r1 = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) | 0x400;
+        M2C_FIELD(&data_02121340, M2C_UNK(**)(M2C_UNK *), 0x10)(&data_021483d4);
+        var_r4                                 = 0;
+        temp_r1                                = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) | 0x400;
         M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = temp_r1;
         M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = (s32) (temp_r1 & ~0x800);
     }

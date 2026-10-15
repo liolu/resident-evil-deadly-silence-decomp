@@ -13,7 +13,7 @@ s32 func_02058f0c(void *arg0) {
         M2C_FIELD(&data_02143cc0, s8 *, 0xFDA) = 0;
         func_020b5080(1, 0, 0, 0);
     } else {
-        M2C_FIELD(temp_r2, s8 *, 0x90) = 1;
+        M2C_FIELD(temp_r2, s8 *, 0x90)                     = 1;
         M2C_FIELD(M2C_FIELD(arg0, void **, 4), s8 *, 0x91) = 0;
         M2C_FIELD(M2C_FIELD(arg0, void **, 4), s8 *, 0x92) = 0;
         M2C_FIELD(M2C_FIELD(arg0, void **, 4), s8 *, 0x93) = 0;

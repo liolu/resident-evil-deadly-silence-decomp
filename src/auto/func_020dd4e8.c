@@ -12,7 +12,7 @@ s32 func_020dd4e8(void *arg0, s32 arg1, s16 *arg2) {
         return -2;
     }
     temp_r1_2 = M2C_FIELD(arg0, s16 *, 2);
-    *arg2 = (u8) (temp_r1_2 >> 8) | ((temp_r1_2 << 8) & 0xFF00);
+    *arg2     = (u8) (temp_r1_2 >> 8) | ((temp_r1_2 << 8) & 0xFF00);
     *arg2 += 4;
     return 0;
 }

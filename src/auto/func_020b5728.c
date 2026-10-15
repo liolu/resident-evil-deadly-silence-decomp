@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_01ff87b4(M2C_UNK, M2C_UNK);
 M2C_UNK func_020b39e4(M2C_UNK, M2C_UNK);
@@ -28,7 +28,7 @@ void func_020b5728(s32 arg0) {
         if ((s32) M2C_FIELD(&data_02144bc0, s16 *, 0xD8) < 0) {
             M2C_FIELD(&data_0213ad98, u16 *, 0x20) = (u16) (M2C_FIELD(&data_0213ad98, u16 *, 0x20) & 3);
             M2C_FIELD(&data_0213ad98, u16 *, 0x22) = (u16) (M2C_FIELD(&data_0213ad98, u16 *, 0x22) & 3);
-            M2C_FIELD(&data_0213b890, s8 *, 3) = 4;
+            M2C_FIELD(&data_0213b890, s8 *, 3)     = 4;
         }
     }
     if (func_020b39e4((s32) &data_0213be20, 0x3E) != 0) {

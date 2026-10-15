@@ -15,11 +15,11 @@ s32 func_0206f4c4(void) {
     s32 temp_lr;
 
     func_02056fb0(5);
-    M2C_FIELD(&data_02121340, M2C_UNK (**)(M2C_UNK *), 4)(&data_021483bc);
+    M2C_FIELD(&data_02121340, M2C_UNK(**)(M2C_UNK *), 4)(&data_021483bc);
     func_020b67e8();
     func_020b80e4();
-    temp_lr = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) & ~0x20000;
-    temp_ip = temp_lr & ~0x10000;
+    temp_lr                                = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) & ~0x20000;
+    temp_ip                                = temp_lr & ~0x10000;
     M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = temp_lr;
     M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = temp_ip;
     M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = (s32) (temp_ip & ~0x100000);

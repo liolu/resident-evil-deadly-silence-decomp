@@ -8,6 +8,6 @@ void func_0207d080(void *arg0) {
 
     M2C_FIELD(arg0, u8 *, 0xD) = (u8) (M2C_FIELD(arg0, u8 *, 0xD) | 0x40);
     func_02082488(arg0, 0x13, 0, 1);
-    temp_r1 = M2C_FIELD(arg0, void **, 0);
+    temp_r1                        = M2C_FIELD(arg0, void **, 0);
     M2C_FIELD(temp_r1, u8 *, 0x92) = (u8) (M2C_FIELD(temp_r1, u8 *, 0x92) + 1);
 }

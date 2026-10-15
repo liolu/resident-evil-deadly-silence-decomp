@@ -20,14 +20,14 @@ void func_0200e714(void *arg0, M2C_UNK arg1) {
         func_0211809c(func_02117e68(temp_r0 << 0xC), 0x3F000000);
     }
     M2C_FIELD(&data_027e003c, s32 *, 0) = func_02117dac();
-    temp_r0_2 = M2C_FIELD(arg0, s32 *, 4);
+    temp_r0_2                           = M2C_FIELD(arg0, s32 *, 4);
     if (temp_r0_2 > 0) {
         func_02116dac(0x3F000000, func_02117e68(temp_r0_2 << 0xC));
     } else {
         func_0211809c(func_02117e68(temp_r0_2 << 0xC), 0x3F000000);
     }
     M2C_FIELD(&data_027e003c, s32 *, 4) = func_02117dac();
-    temp_r0_3 = M2C_FIELD(arg0, s32 *, 8);
+    temp_r0_3                           = M2C_FIELD(arg0, s32 *, 8);
     if (temp_r0_3 > 0) {
         func_02116dac(0x3F000000, func_02117e68(temp_r0_3 << 0xC));
     } else {

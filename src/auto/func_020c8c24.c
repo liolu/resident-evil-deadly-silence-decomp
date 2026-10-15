@@ -27,5 +27,5 @@ void func_020c8c24(void) {
     M2C_FIELD(&data_0213ad98, u8 *, 2) = (u8) M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), u8 *, 0x104);
     func_020b3a00(&data_0213be00, 0x20);
     M2C_FIELD(&data_02143cc0, s32 *, 0xF78) = (s32) M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), s32 *, 0xC);
-    M2C_FIELD(&data_0213b890, s32 *, 0x78) = 0;
+    M2C_FIELD(&data_0213b890, s32 *, 0x78)  = 0;
 }

@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 s32 func_020871a4(s32 arg0, s32 arg1) {
     u8 temp_r1;

@@ -1,5 +1,5 @@
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 extern s8 data_021375a8;
 

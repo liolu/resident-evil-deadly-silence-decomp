@@ -17,11 +17,11 @@ void func_020a8978(void *arg0) {
         M2C_FIELD(arg0, s16 *, 0x44) = (s16) (M2C_FIELD(arg0, s16 *, 0x44) - 0x50);
     }
     if (M2C_FIELD(arg0, u8 *, 0x93) == 0) {
-        M2C_FIELD(arg0, u8 *, 0x93) = 1U;
-        M2C_FIELD(arg0, s8 *, 0x98) = 3;
-        M2C_FIELD(arg0, s8 *, 0xA3) = 0;
+        M2C_FIELD(arg0, u8 *, 0x93)  = 1U;
+        M2C_FIELD(arg0, s8 *, 0x98)  = 3;
+        M2C_FIELD(arg0, s8 *, 0xA3)  = 0;
         M2C_FIELD(arg0, s16 *, 0xA6) = 1;
-        M2C_FIELD(arg0, s8 *, 0xA1) = 5;
+        M2C_FIELD(arg0, s8 *, 0xA1)  = 5;
         func_020adad0(0x803B);
     }
     temp_r5 = *M2C_FIELD(M2C_FIELD(&data_02143cc0, void **, 0xF44), s32 **, 0x10);

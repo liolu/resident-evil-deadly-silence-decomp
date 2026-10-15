@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_02105528(void);
 
@@ -11,6 +11,6 @@ void func_02093180(s32 arg0, s32 arg1, s32 arg2) {
             func_02105528();
         }
     }
-    M2C_FIELD((arg0 + M2C_FIELD(arg0, u8 *, 4)), s8 *, 0x14) = (s8) arg2;
+    M2C_FIELD((arg0 + M2C_FIELD(arg0, u8 *, 4)), s8 *, 0x14)        = (s8) arg2;
     M2C_FIELD((arg0 + (M2C_FIELD(arg0, u8 *, 4) * 4)), s32 *, 0x18) = arg1;
 }

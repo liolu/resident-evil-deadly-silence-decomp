@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_020e0270(s32 arg0) {
     M2C_FIELD(arg0, s32 *, 0x98) = 0;
@@ -11,7 +11,7 @@ void func_020e0270(s32 arg0) {
     M2C_FIELD(arg0, s32 *, 0x3C) = -1;
     M2C_FIELD(arg0, s32 *, 0x40) = 0;
     M2C_FIELD(arg0, s32 *, 0x44) = 0;
-    M2C_FIELD(arg0, s8 *, 3) = 0;
+    M2C_FIELD(arg0, s8 *, 3)     = 0;
     M2C_FIELD(arg0, s32 *, 0xA0) = 0;
     M2C_FIELD(arg0, s32 *, 0xA4) = 0;
 }

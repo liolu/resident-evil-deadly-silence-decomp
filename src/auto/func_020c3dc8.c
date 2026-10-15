@@ -30,7 +30,7 @@ void func_020c3dc8(void) {
         func_020adad0(var_r0);
         M2C_FIELD(&data_02143cc0, s8 *, 0xF4E) = 0;
         M2C_FIELD(&data_02144cc0, s16 *, 0x30) = 0x20;
-        M2C_FIELD(&data_02144cc0, s8 *, 3) = 0x20;
+        M2C_FIELD(&data_02144cc0, s8 *, 3)     = 0x20;
         if (M2C_FIELD(&data_0213daa8, u16 *, 0x78) != 0) {
             M2C_FIELD(&data_0213daa8, u16 *, 0x74) = (u16) M2C_FIELD(&data_0213daa8, u16 *, 0x78);
             M2C_FIELD(&data_0213daa8, u16 *, 0x78) = 0U;

@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_020e5e0c(M2C_UNK);
 
@@ -16,7 +16,7 @@ s32 func_020e564c(s32 arg0) {
         func_020e5e0c((s32) &data_02130afc);
         return 3;
     }
-    temp_r1 = M2C_FIELD(M2C_FIELD(arg0, void **, 0), s32 (**)(s32), 0x2C);
+    temp_r1 = M2C_FIELD(M2C_FIELD(arg0, void **, 0), s32(**)(s32), 0x2C);
     if (temp_r1 != NULL) {
         var_r4 = temp_r1(M2C_FIELD(arg0, s32 *, 4));
     } else {

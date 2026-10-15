@@ -14,12 +14,12 @@ void func_02105804(s32 arg0, s32 arg1, s32 arg2, s32 arg3) {
     }
     temp_r0 = var_r1 & 0xFF000000;
     switch (arg3) {                                 /* irregular */
-    case 0x800000:
-        var_r1 -= arg2;
-        break;
-    case 0x0:
-        var_r1 += arg2;
-        break;
+        case 0x800000:
+            var_r1 -= arg2;
+            break;
+        case 0x0:
+            var_r1 += arg2;
+            break;
     }
     if ((temp_r0 != 0x04000000) && (temp_r0 < 0x08000000U)) {
         temp_r0_2 = var_r1 & 0xFF000000;

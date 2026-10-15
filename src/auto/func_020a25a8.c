@@ -13,7 +13,7 @@ s32 func_020a25a8(void *arg0) {
     }
     M2C_FIELD(&data_02144bc0, u16 *, 0xEE) = (u16) M2C_FIELD(arg0, u16 *, 4);
     M2C_FIELD(&data_02144bc0, u16 *, 0xF0) = (u16) M2C_FIELD(arg0, u16 *, 6);
-    M2C_FIELD(arg0, u16 *, 2) = (u16) (M2C_FIELD(arg0, u16 *, 2) ^ 1);
+    M2C_FIELD(arg0, u16 *, 2)              = (u16) (M2C_FIELD(arg0, u16 *, 2) ^ 1);
     M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = (s32) (M2C_FIELD(&data_0213bdcc, s32 *, 0x44) | 0x10);
     return 0;
 }

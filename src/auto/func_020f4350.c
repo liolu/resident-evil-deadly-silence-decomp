@@ -1,5 +1,5 @@
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_020f4350(s32 arg0, s32 arg1, s32 arg2) {
     if (arg1 != 0) {

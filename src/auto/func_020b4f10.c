@@ -8,9 +8,9 @@ s32 func_020b4f10(void) {
     void *temp_r0;
     void *temp_r4;
 
-    temp_r4 = data_0213daa8;
-    data_0213daa8 = temp_r4 + 0xE;
-    temp_r0 = func_02053e90(M2C_FIELD(temp_r4, u8 *, 1));
+    temp_r4                         = data_0213daa8;
+    data_0213daa8                   = temp_r4 + 0xE;
+    temp_r0                         = func_02053e90(M2C_FIELD(temp_r4, u8 *, 1));
     M2C_FIELD(temp_r0, u16 *, 0xEC) = (u16) (M2C_FIELD(temp_r0, u16 *, 0xEC) & 0xFFF3);
     M2C_FIELD(temp_r0, s16 *, 0x42) = (s16) M2C_FIELD(temp_r4, s16 *, 2);
     M2C_FIELD(temp_r0, s16 *, 0x44) = (s16) M2C_FIELD(temp_r4, s16 *, 4);

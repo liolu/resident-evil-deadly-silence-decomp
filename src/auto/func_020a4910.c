@@ -19,7 +19,7 @@ void func_020a4910(void) {
     func_021007e8(0x04001050, 4, 8, 0x16, 0xA);
     func_020039b8(5, 0x10);
     func_020038b8(&data_021214a8);
-    func_02005fcc(*((M2C_UNK *)((s8 *)&data_02121490 + (M2C_FIELD(&data_0213ad48, u8 *, 3) * 4))));
+    func_02005fcc(*((M2C_UNK *) ((s8 *) &data_02121490 + (M2C_FIELD(&data_0213ad48, u8 *, 3) * 4))));
     func_020a44d4();
     func_020c4778(1);
     func_02003ad8(2);

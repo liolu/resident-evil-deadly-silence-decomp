@@ -8,5 +8,5 @@ extern M2C_UNK data_0213b3ac;
 void func_02088a20(void) {
     func_020f3224(&data_0213b3ac, M2C_FIELD(&data_021375ac, s32 *, 0x64));
     M2C_FIELD(&data_021375ac, s32 *, 0x64) = 0;
-    M2C_FIELD(&data_021375ac, s8 *, 0) = 0;
+    M2C_FIELD(&data_021375ac, s8 *, 0)     = 0;
 }

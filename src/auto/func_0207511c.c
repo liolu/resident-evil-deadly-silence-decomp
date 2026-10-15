@@ -14,7 +14,8 @@ void func_0207511c(s8 arg0) {
     if (arg0 == 0) {
         M2C_FIELD(&data_02147cc0, M2C_UNK **, 0x53C) = &data_0213bf2c;
     } else {
-        M2C_FIELD(&data_02147cc0, M2C_UNK **, 0x53C) = (M2C_UNK *) (M2C_FIELD(&data_02147cc0, s32 *, 0x538) + ((arg0 - 1) * 2));
+        M2C_FIELD(&data_02147cc0, M2C_UNK **, 0x53C) =
+            (M2C_UNK *) (M2C_FIELD(&data_02147cc0, s32 *, 0x538) + ((arg0 - 1) * 2));
     }
     func_020751c4();
     if (M2C_FIELD(&data_02143cc0, u8 *, 0xF4E) != 1) {

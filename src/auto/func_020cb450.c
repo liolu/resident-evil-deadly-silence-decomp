@@ -28,7 +28,7 @@ void func_020cb450(void) {
     func_020c3c0c(&data_0213b8ac, &func_020cadbc, 0, 0x38);
     func_020c01dc(M2C_FIELD(&data_0213b890, s32 *, 0x4C) + 8, 0, 8, 0xB, 0);
     func_020c01dc(M2C_FIELD(&data_0213b890, s32 *, 0x4C) + 0x20, 2, 9, 2, 1);
-    *(s32 *)0x04000000 = (*(s32 *)0x04000000 & ~0x1F00) | 0x1800;
+    *(s32 *) 0x04000000 = (*(s32 *) 0x04000000 & ~0x1F00) | 0x1800;
     func_02013638(0, 0, &data_02125d4c);
     func_020c01c0();
     M2C_FIELD(&data_0213b890, s8 *, 0x24) = 5;

@@ -33,10 +33,10 @@ void func_020bdf34(void) {
     func_020c3708(M2C_FIELD(&data_0213b890, u8 *, 9), 1);
     M2C_FIELD(&data_0213b890, s32 *, 0x264) = -0x32;
     M2C_FIELD(&data_0213b890, s32 *, 0x274) = 0x14C;
-    M2C_FIELD(&data_0213ba90, s16 *, 0x24) = 0x7FFF;
+    M2C_FIELD(&data_0213ba90, s16 *, 0x24)  = 0x7FFF;
     func_020f4c1c(1, 0, 2, 0, 0x1F, 0);
     func_020bd478(M2C_FIELD(&data_0213b890, s32 *, 0x4C) + 0x10, 0);
-    *(s32 *)0x04000000 = (*(s32 *)0x04000000 & ~0x1F00) | 0x1D00;
+    *(s32 *) 0x04000000 = (*(s32 *) 0x04000000 & ~0x1F00) | 0x1D00;
     func_020c4798(1);
     func_0206fcf8(0, 2, 0, 0x100);
 }

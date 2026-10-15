@@ -29,9 +29,9 @@ void func_0208da2c(void) {
     func_02085acc(temp_r4);
     func_02003ba0();
     func_0208db30();
-    M2C_FIELD(data_0213789c, u8 *, 4) = (u8) (M2C_FIELD(data_0213789c, u8 *, 4) + 1);
-    M2C_FIELD(data_02137898, s8 *, 5) = 0;
-    M2C_FIELD(data_0213789c, s8 *, 0) = 0;
+    M2C_FIELD(data_0213789c, u8 *, 4)    = (u8) (M2C_FIELD(data_0213789c, u8 *, 4) + 1);
+    M2C_FIELD(data_02137898, s8 *, 5)    = 0;
+    M2C_FIELD(data_0213789c, s8 *, 0)    = 0;
     M2C_FIELD(data_0213789c, s16 *, 0xA) = 0xA;
     func_0206fcf8(3, 2, 0, 0x80);
 }

@@ -19,9 +19,9 @@ s32 func_020609d8(void) {
     func_02056fb0(0x15);
     func_02056fb0(0x16);
     if (func_020b39e4(&data_0213be00, 0x7F) == 0) {
-        M2C_FIELD(&data_02121340, M2C_UNK (**)(M2C_UNK *), 0x10)(&data_021483e0);
-        var_r4 = 0;
-        temp_r1 = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) | 0x400;
+        M2C_FIELD(&data_02121340, M2C_UNK(**)(M2C_UNK *), 0x10)(&data_021483e0);
+        var_r4                                 = 0;
+        temp_r1                                = M2C_FIELD(&data_0213bdcc, s32 *, 0x44) | 0x400;
         M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = temp_r1;
         M2C_FIELD(&data_0213bdcc, s32 *, 0x44) = (s32) (temp_r1 & ~0x800);
     }

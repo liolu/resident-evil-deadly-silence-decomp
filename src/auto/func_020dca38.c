@@ -7,7 +7,8 @@ s16 func_020dca38(void *arg0, M2C_UNK arg1, M2C_UNK arg2) {
     s16 sp1C;
 
     M2C_FIELD(arg0, s16 *, 2) = 1;
-    if (func_020dcb34(arg1, arg2, &sp1C, arg0 + 0xC, arg0 + 0xD, arg0 + 0xF, arg0 + 0xE, arg0 + 0x14, arg0 + 0x18, arg0 + 0x10, arg0 + 0x9C) < 0) {
+    if (func_020dcb34(arg1, arg2, &sp1C, arg0 + 0xC, arg0 + 0xD, arg0 + 0xF, arg0 + 0xE, arg0 + 0x14, arg0 + 0x18, arg0 + 0x10,
+                      arg0 + 0x9C) < 0) {
         return 0;
     }
     M2C_FIELD(arg0, s16 *, 0x1C) = 0;

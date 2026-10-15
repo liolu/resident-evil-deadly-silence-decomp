@@ -24,7 +24,7 @@ void func_020e5260(void *arg0) {
             if (var_r0 == 0) {
                 func_020e4aac();
                 M2C_FIELD(arg0, s32 *, 0x70) = 0;
-                M2C_FIELD(arg0, s8 *, 1) = 1;
+                M2C_FIELD(arg0, s8 *, 1)     = 1;
                 M2C_FIELD(arg0, s32 *, 0x58) = (s32) (M2C_FIELD(arg0, s32 *, 0x58) + M2C_FIELD(arg0, s32 *, 0x60));
                 M2C_FIELD(arg0, s32 *, 0x5C) = (s32) (M2C_FIELD(arg0, s32 *, 0x60) * M2C_FIELD(arg0, s32 *, 0x4C));
                 M2C_FIELD(arg0, s32 *, 0x60) = 0;

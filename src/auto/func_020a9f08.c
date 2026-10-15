@@ -12,7 +12,7 @@ s32 func_020a9f08(void *arg0) {
     }
     var_r0 = M2C_FIELD(&data_0213ad98, u16 *, 0x20) & 0x14;
     if (var_r0 != 0) {
-        var_r0 = 5;
+        var_r0                      = 5;
         M2C_FIELD(arg0, u8 *, 0x93) = 5U;
     }
     return var_r0;

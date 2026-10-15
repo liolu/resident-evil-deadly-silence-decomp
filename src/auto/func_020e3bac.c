@@ -24,7 +24,7 @@ s32 func_020e3bac(void *arg0, s32 arg1) {
     if (arg1 == 0) {
         return M2C_FIELD(arg0, s32 *, 0x10);
     }
-    temp_r2 = M2C_FIELD(arg0, M2C_UNK (**)(s32, M2C_UNK), 0x38);
+    temp_r2 = M2C_FIELD(arg0, M2C_UNK(**)(s32, M2C_UNK), 0x38);
     if (temp_r2 != NULL) {
         temp_r2(M2C_FIELD(arg0, s32 *, 0x3C), -3);
     }

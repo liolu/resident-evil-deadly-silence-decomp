@@ -20,7 +20,7 @@ void func_020e73a8(void *arg0, s32 arg1, s32 arg2) {
     if (var_r2 <= -0xF) {
         var_r2 = -0xF;
     }
-    temp_r1 = arg0 + (arg1 * 4);
+    temp_r1                         = arg0 + (arg1 * 4);
     M2C_FIELD(temp_r1, s32 *, 0x40) = var_r2;
     func_020e8798(M2C_FIELD(temp_r1, s32 *, 0x48), M2C_FIELD(temp_r1, s32 *, 0x40));
 }

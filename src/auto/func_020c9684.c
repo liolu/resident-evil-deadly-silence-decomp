@@ -1,5 +1,5 @@
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 extern M2C_UNK data_0213b890;
 
@@ -12,7 +12,7 @@ void func_020c9684(void) {
         return;
     }
     M2C_FIELD(temp_r2, s16 *, 0x14) = (s16) (M2C_FIELD(temp_r2, s16 *, 0x14) - 1);
-    temp_r3 = M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), void **, 0x2F8);
+    temp_r3                         = M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), void **, 0x2F8);
     if (M2C_FIELD(temp_r3, s16 *, 0x14) != 0) {
         return;
     }

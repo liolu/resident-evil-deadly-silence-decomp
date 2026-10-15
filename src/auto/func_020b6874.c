@@ -14,5 +14,6 @@ void func_020b6874(s32 arg0) {
     } else {
         var_r4 = 0;
     }
-    func_020b82fc((u8) (arg0 + (var_r4 + func_02073e4c((s16) M2C_FIELD(data_027e000c, s32 *, 0x30), (s16) M2C_FIELD(data_027e000c, s32 *, 0x38)))));
+    func_020b82fc((u8) (arg0 + (var_r4 + func_02073e4c((s16) M2C_FIELD(data_027e000c, s32 *, 0x30),
+                                                       (s16) M2C_FIELD(data_027e000c, s32 *, 0x38)))));
 }

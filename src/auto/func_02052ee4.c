@@ -21,10 +21,12 @@ void func_02052ee4(void) {
         }
         M2C_FIELD(data_027e000c, s8 *, 0x98) = var_r2;
         func_020559cc(data_027e000c, 0);
-        M2C_FIELD(data_027e000c, s8 *, 0xA2) = 0;
-        M2C_FIELD(data_027e000c, s8 *, 0xA3) = 0;
+        M2C_FIELD(data_027e000c, s8 *, 0xA2)  = 0;
+        M2C_FIELD(data_027e000c, s8 *, 0xA3)  = 0;
         M2C_FIELD(data_027e000c, s16 *, 0xA8) = 8;
-        func_02052114(M2C_FIELD(data_027e000c, s32 *, 0x30), M2C_FIELD(data_027e000c, s32 *, 0x38), M2C_FIELD(data_027e000c, s32 *, 0xB0), M2C_FIELD(data_027e000c, s32 *, 0xB8), (s32) M2C_FIELD(data_027e000c, s16 *, 0xA8));
+        func_02052114(M2C_FIELD(data_027e000c, s32 *, 0x30), M2C_FIELD(data_027e000c, s32 *, 0x38),
+                      M2C_FIELD(data_027e000c, s32 *, 0xB0), M2C_FIELD(data_027e000c, s32 *, 0xB8),
+                      (s32) M2C_FIELD(data_027e000c, s16 *, 0xA8));
     }
     if (M2C_FIELD(data_027e000c, s16 *, 0xA8) != 0) {
         func_020520c0();

@@ -23,14 +23,14 @@ void func_0209fd64(void *arg0, void *arg1, void *arg2) {
         func_0211809c(func_02117e68(temp_r0 << 0xC), 0x3F000000);
     }
     M2C_FIELD(arg1, s32 *, 0) = (s32) (M2C_FIELD(arg1, s32 *, 0) + func_02117dac());
-    temp_r0_2 = M2C_FIELD(arg0, s32 *, 4);
+    temp_r0_2                 = M2C_FIELD(arg0, s32 *, 4);
     if (temp_r0_2 > 0) {
         func_02116dac(0x3F000000, func_02117e68(temp_r0_2 << 0xC));
     } else {
         func_0211809c(func_02117e68(temp_r0_2 << 0xC), 0x3F000000);
     }
     M2C_FIELD(arg1, s32 *, 4) = (s32) (M2C_FIELD(arg1, s32 *, 4) + func_02117dac());
-    temp_r0_3 = M2C_FIELD(arg0, s32 *, 8);
+    temp_r0_3                 = M2C_FIELD(arg0, s32 *, 8);
     if (temp_r0_3 > 0) {
         func_02116dac(0x3F000000, func_02117e68(temp_r0_3 << 0xC));
     } else {

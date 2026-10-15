@@ -11,7 +11,7 @@ void func_0210ad1c(void **arg0, void *arg1) {
     var_r2 = *arg0;
     if (var_r2 == NULL) {
         M2C_FIELD(arg1, void **, 8) = NULL;
-        *arg0 = arg1;
+        *arg0                       = arg1;
         return;
     }
     var_r0 = M2C_FIELD(var_r2, void **, 8);
@@ -21,6 +21,6 @@ void func_0210ad1c(void **arg0, void *arg1) {
             var_r0 = M2C_FIELD(var_r0, void **, 8);
         } while (var_r0 != NULL);
     }
-    M2C_FIELD(arg1, void **, 8) = var_r0;
+    M2C_FIELD(arg1, void **, 8)   = var_r0;
     M2C_FIELD(var_r2, void **, 8) = arg1;
 }

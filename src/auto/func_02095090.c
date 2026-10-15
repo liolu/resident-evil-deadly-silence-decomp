@@ -8,12 +8,12 @@ extern M2C_UNK data_02144cc0;
 
 void func_02095090(s32 arg0) {
     switch (arg0) {                                 /* irregular */
-    case 2:
-        M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) = (s32) (M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) | 0x20000);
-        break;
-    case 1:
-        M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) = (s32) (M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) | 0x10000);
-        break;
+        case 2:
+            M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) = (s32) (M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) | 0x20000);
+            break;
+        case 1:
+            M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) = (s32) (M2C_FIELD(&data_0213bb18, s32 *, 0x1FC) | 0x10000);
+            break;
     }
     M2C_FIELD(&data_0213bd18, s16 *, 4) = 0;
     M2C_FIELD(&data_0213bd18, s16 *, 6) = 0;

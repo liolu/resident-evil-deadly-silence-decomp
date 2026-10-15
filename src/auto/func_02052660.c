@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_020559cc(M2C_UNK, M2C_UNK);
 M2C_UNK func_02075738(M2C_UNK, M2C_UNK);
@@ -8,8 +8,10 @@ M2C_UNK func_02075738(M2C_UNK, M2C_UNK);
 extern void *data_027e000c;
 
 void func_02052660(void) {
-    M2C_FIELD(data_027e000c, s32 *, 0x188) = (s32) (M2C_FIELD(data_027e000c, s32 *, 0x188) + M2C_FIELD(data_027e000c, s32 *, 0x17C));
-    M2C_FIELD(data_027e000c, s32 *, 0x190) = (s32) (M2C_FIELD(data_027e000c, s32 *, 0x190) + M2C_FIELD(data_027e000c, s32 *, 0x184));
+    M2C_FIELD(data_027e000c, s32 *, 0x188) =
+        (s32) (M2C_FIELD(data_027e000c, s32 *, 0x188) + M2C_FIELD(data_027e000c, s32 *, 0x17C));
+    M2C_FIELD(data_027e000c, s32 *, 0x190) =
+        (s32) (M2C_FIELD(data_027e000c, s32 *, 0x190) + M2C_FIELD(data_027e000c, s32 *, 0x184));
     M2C_FIELD(data_027e000c, s32 *, 0x30) = (s32) ((s32) M2C_FIELD(data_027e000c, s32 *, 0x188) >> 0x10);
     M2C_FIELD(data_027e000c, s32 *, 0x38) = (s32) ((s32) M2C_FIELD(data_027e000c, s32 *, 0x190) >> 0x10);
     M2C_FIELD(data_027e000c, s16 *, 0xA8) = (s16) (M2C_FIELD(data_027e000c, s16 *, 0xA8) - 1);

@@ -19,7 +19,7 @@ void func_020c3b24(void) {
     func_0210626c(&data_02125590, &data_0213ba64, 0x84);
     var_r5 = 0;
     do {
-        temp_r0 = (M2C_UNK *)((s8 *)&data_0213baa8 + (var_r5 * 0x10));
+        temp_r0 = (M2C_UNK *) ((s8 *) &data_0213baa8 + (var_r5 * 0x10));
         func_020fec68(temp_r0, temp_r0);
         var_r5 += 1;
     } while ((u32) var_r5 < 4U);

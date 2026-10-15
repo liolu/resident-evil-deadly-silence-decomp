@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 void func_020dd470(void);
 void func_020dd47c(void);
@@ -23,9 +23,9 @@ void func_020e14bc(void) {
     data_0214f78c = 1;
     func_020dd470();
     func_020df3cc();
-    var_r4 = &data_0214f308;
+    var_r4        = &data_0214f308;
     data_0214f78c = 2;
-    var_r5 = 0;
+    var_r5        = 0;
     do {
         if (*var_r4 == 1) {
             func_020e21e0((s32) var_r4);

@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 extern M2C_UNK data_0213b890;
 
@@ -22,7 +22,7 @@ void func_020c7514(void) {
     if (M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), u8 *, 0x7A) != 0) {
         return;
     }
-    M2C_FIELD(&data_0213b890, u8 *, 0x23) = (u8) (M2C_FIELD(&data_0213b890, u8 *, 0x23) + 1);
+    M2C_FIELD(&data_0213b890, u8 *, 0x23)                           = (u8) (M2C_FIELD(&data_0213b890, u8 *, 0x23) + 1);
     M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), s8 *, 0xE8) = 1;
     M2C_FIELD(M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), void **, 0x18), s8 *, 0xA) = 0x47;
     M2C_FIELD(M2C_FIELD(M2C_FIELD(&data_0213b890, void **, 0x4C), void **, 0x1C), s8 *, 0xA) = 0x47;

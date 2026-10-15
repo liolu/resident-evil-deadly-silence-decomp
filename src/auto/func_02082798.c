@@ -15,7 +15,7 @@ void func_02082798(void *arg0) {
     func_02091604(M2C_FIELD(arg0, void **, 0) + 0x54, (u8) var_r1);
     M2C_FIELD(arg0, u8 *, 0x17) = (u8) (M2C_FIELD(arg0, u8 *, 0x17) - 1);
     if ((u32) M2C_FIELD(arg0, u8 *, 0x17) <= 1U) {
-        temp_r1 = M2C_FIELD(arg0, void **, 0);
+        temp_r1                        = M2C_FIELD(arg0, void **, 0);
         M2C_FIELD(temp_r1, u8 *, 0x92) = (u8) (M2C_FIELD(temp_r1, u8 *, 0x92) + 1);
     }
 }

@@ -12,7 +12,7 @@ void func_020512c0(s32 arg0, s32 arg1, u32 arg2) {
     void *temp_r4;
     void *temp_r4_2;
 
-    var_r2 = arg2;
+    var_r2  = arg2;
     temp_r0 = M2C_FIELD(data_027e000c, u8 *, 0xA1);
     if ((var_r2 == 2) && (temp_r0 == 1)) {
         var_r2 = 3;
@@ -27,8 +27,11 @@ void func_020512c0(s32 arg0, s32 arg1, u32 arg2) {
     }
     func_020559cc(data_027e000c, var_r2);
     temp_r4 = data_027e000c;
-    M2C_FIELD(temp_r4, s32 *, 0x17C) = func_0211851c(((M2C_FIELD(temp_r4, s32 *, 0xB0) + arg0) - M2C_FIELD(temp_r4, s32 *, 0x30)) << 0x10, 0xF);
+    M2C_FIELD(temp_r4, s32 *, 0x17C) =
+        func_0211851c(((M2C_FIELD(temp_r4, s32 *, 0xB0) + arg0) - M2C_FIELD(temp_r4, s32 *, 0x30)) << 0x10, 0xF);
     temp_r4_2 = data_027e000c;
-    M2C_FIELD(temp_r4_2, s32 *, 0x180) = func_0211851c(((M2C_FIELD(temp_r4_2, s32 *, 0xB8) + arg1) - M2C_FIELD(temp_r4_2, s32 *, 0x38)) << 0x10, 0xF);
-    func_0205126c(M2C_FIELD(data_027e000c, s32 *, 0x30), M2C_FIELD(data_027e000c, s32 *, 0x38), M2C_FIELD(data_027e000c, s32 *, 0xB0) + arg0, M2C_FIELD(data_027e000c, s32 *, 0xB8) + arg1, 0xF);
+    M2C_FIELD(temp_r4_2, s32 *, 0x180) =
+        func_0211851c(((M2C_FIELD(temp_r4_2, s32 *, 0xB8) + arg1) - M2C_FIELD(temp_r4_2, s32 *, 0x38)) << 0x10, 0xF);
+    func_0205126c(M2C_FIELD(data_027e000c, s32 *, 0x30), M2C_FIELD(data_027e000c, s32 *, 0x38),
+                  M2C_FIELD(data_027e000c, s32 *, 0xB0) + arg0, M2C_FIELD(data_027e000c, s32 *, 0xB8) + arg1, 0xF);
 }

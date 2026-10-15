@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 M2C_UNK func_021040b0(void);
 M2C_UNK func_021040e4(void);
@@ -23,7 +23,7 @@ s32 func_021041b8(void) {
         } else {
             var_r2 = temp_r4 | 0x80000000;
         }
-        data_02136ba0 = var_r2 | *(u16 *)0x027FFFFA;
+        data_02136ba0 = var_r2 | *(u16 *) 0x027FFFFA;
     }
     return data_02136ba0;
 }

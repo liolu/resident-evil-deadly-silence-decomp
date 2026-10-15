@@ -17,6 +17,6 @@ s32 func_020ddb8c(void *arg0, s32 arg1, s16 *arg2) {
         return -1;
     }
     temp_r1_3 = M2C_FIELD(arg0, u16 *, 0x10);
-    *arg2 = (u8) ((s32) temp_r1_3 >> 8) | ((temp_r1_3 << 8) & 0xFF00);
+    *arg2     = (u8) ((s32) temp_r1_3 >> 8) | ((temp_r1_3 << 8) & 0xFF00);
     return 0;
 }

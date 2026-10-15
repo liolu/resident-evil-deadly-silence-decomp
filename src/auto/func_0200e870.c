@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 s32 func_0200e870(s32 arg0, s32 arg1, s32 arg2, s32 arg3, u16 arg4, s32 arg5, s32 arg6, s32 arg7) {
     s32 var_ip;

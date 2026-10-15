@@ -24,7 +24,7 @@ void func_020bc4c0(void) {
     if (func_020b39e4(&data_0213be00, 0x37) != 0) {
         func_020bb6ec(0x8063);
         func_02072dc8(M2C_FIELD(data_027e000c, void **, 0), M2C_FIELD(data_027e000c, s32 *, 0x188));
-        temp_ip = M2C_FIELD(M2C_FIELD(data_027e000c, void **, 0), void **, 0x10);
+        temp_ip                      = M2C_FIELD(M2C_FIELD(data_027e000c, void **, 0), void **, 0x10);
         M2C_FIELD(temp_ip, s32 *, 0) = (s32) (M2C_FIELD(M2C_FIELD(temp_ip, void **, 8), u16 *, 4) << 0xC);
         func_02091624(data_027e000c + 0x54, 0x3FE66666, 0x40400000);
         func_020555b4(data_027e000c);

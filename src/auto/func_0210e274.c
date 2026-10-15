@@ -23,8 +23,8 @@ s32 func_0210e274(M2C_UNK arg0, u16 *arg1, s32 arg2, s32 arg3, u16 arg4) {
     }
     func_021046b8(arg1, *arg1 * 2);
     func_0210da98(0xC, arg0);
-    temp_r4 = M2C_FIELD(func_0210d934(), void **, 0xC);
-    M2C_FIELD(temp_r4, s16 *, 0) = 0xC;
+    temp_r4                       = M2C_FIELD(func_0210d934(), void **, 0xC);
+    M2C_FIELD(temp_r4, s16 *, 0)  = 0xC;
     M2C_FIELD(temp_r4, u16 **, 4) = arg1;
     if (arg2 != 0) {
         func_0210626c(arg2, temp_r4 + 8, 0x18);
@@ -33,7 +33,7 @@ s32 func_0210e274(M2C_UNK arg0, u16 *arg1, s32 arg2, s32 arg3, u16 arg4) {
     }
     M2C_FIELD(temp_r4, s32 *, 0x20) = arg3;
     M2C_FIELD(temp_r4, u16 *, 0x26) = arg4;
-    var_r0 = func_0210d944(0xC, 0);
+    var_r0                          = func_0210d944(0xC, 0);
     if (var_r0 == 0) {
         var_r0 = 2;
     }

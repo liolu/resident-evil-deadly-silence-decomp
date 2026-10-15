@@ -1,6 +1,6 @@
 /* compiler: 1.2/sp2p3  */
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
 extern void **data_02137338;
 extern void *data_027e000c;
@@ -12,7 +12,7 @@ void func_0202f10c(void) {
     void *temp_r3;
 
     temp_r3 = *data_02137338;
-    var_ip = M2C_FIELD(temp_r3, s32 *, 0x38) - M2C_FIELD(data_027e000c, s32 *, 0x38);
+    var_ip  = M2C_FIELD(temp_r3, s32 *, 0x38) - M2C_FIELD(data_027e000c, s32 *, 0x38);
     if (var_ip < 0) {
         var_ip = 0 - var_ip;
     }

@@ -17,7 +17,7 @@ s32 func_020e861c(s8 *arg0, s32 *arg1) {
         func_02110440(&data_02153ee0, &data_0213136c, arg0, 0x12);
         func_020e8720(0, &data_02153ee0);
     }
-    sp0 = arg0;
+    sp0     = arg0;
     temp_r4 = func_020e86b8(arg0, &sp0, 0x10);
     if (*sp0 != 0) {
         sp0 += 1;

@@ -1,6 +1,4 @@
-#include "m2c.h"
 #include "engine.h"
+#include "m2c.h"
 
-void func_0204f3d4(void) {
-
-}
+void func_0204f3d4(void) {}

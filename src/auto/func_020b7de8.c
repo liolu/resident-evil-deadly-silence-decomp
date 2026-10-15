@@ -17,6 +17,6 @@ void func_020b7de8(s32 arg0) {
         func_0200d8a4(M2C_FIELD(temp_r4, s32 *, 4));
     }
     M2C_FIELD(temp_r4, s32 *, 4) = 0;
-    M2C_FIELD(temp_r4, s8 *, 1) = 0;
-    M2C_FIELD(temp_r4, s8 *, 0) = 0;
+    M2C_FIELD(temp_r4, s8 *, 1)  = 0;
+    M2C_FIELD(temp_r4, s8 *, 0)  = 0;
 }

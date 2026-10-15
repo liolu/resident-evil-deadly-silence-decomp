@@ -12,18 +12,18 @@ s32 func_02006b58(s32 arg0) {
 
     var_r0_2 = arg0;
     switch (var_r0_2) {                             /* irregular */
-    case 0:
-        var_r0_2 = func_0210a9e8(data_02137298 + 0x3EEC);
-        if (var_r0_2 == 0) {
-            M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) | 1);
-        } else {
+        case 0:
+            var_r0_2 = func_0210a9e8(data_02137298 + 0x3EEC);
+            if (var_r0_2 == 0) {
+                M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) | 1);
+            } else {
+                M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) & ~1);
+            }
+            break;
+        case 1:
             M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) & ~1);
-        }
-        break;
-    case 1:
-        M2C_FIELD(data_02137298, u8 *, 0x3EAA) = (u8) (M2C_FIELD(data_02137298, u8 *, 0x3EAA) & ~1);
-        var_r0_2 = func_0210aa2c(data_02137298 + 0x3EEC, &func_02007344, 0);
-        break;
+            var_r0_2                               = func_0210aa2c(data_02137298 + 0x3EEC, &func_02007344, 0);
+            break;
     }
     if (var_r0_2 != 0) {
         var_r0 = 1;

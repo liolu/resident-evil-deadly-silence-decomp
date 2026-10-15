@@ -10,7 +10,7 @@ void func_020dc53c(void *arg0) {
     if (arg0 == NULL) {
         return;
     }
-    temp_r0 = M2C_FIELD(arg0, s32 *, 8);
+    temp_r0                   = M2C_FIELD(arg0, s32 *, 8);
     M2C_FIELD(arg0, s32 *, 8) = 0;
     func_020e30fc(temp_r0);
     func_0211035c(arg0, 0, 0xEC);
