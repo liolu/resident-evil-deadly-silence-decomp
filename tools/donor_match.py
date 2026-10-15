@@ -301,7 +301,7 @@ def _project_symbols(sym_file: Path) -> dict[int, str]:
 
 
 def _project_index(game_dir: Path) -> dict | None:
-    """Matched single-function source files of another project of this workspace, by fingerprint (cached in
+    """Functions of the matched source files of another project of this workspace, by fingerprint (cached in
     decomp ds/donors_internal/<game>.json until its delinks.txt changes)."""
     try:
         dl = next(game_dir.glob("config/*/arm9/delinks.txt"))
@@ -341,12 +341,17 @@ def _project_index(game_dir: Path) -> dict | None:
     for path, a, b in re.findall(r"^(src/\S+):\n\s+complete\n\s+\.text\s+start:0x([0-9a-f]+) end:0x([0-9a-f]+)",
                                  dl.read_text(), re.M):
         a, b = int(a, 16), int(b, 16)
-        fn = funcs.get(a)
-        if not fn or a + fn[1] != b or not path.endswith(".c"):
-            continue  # only files holding exactly one function
-        fp = donorlib.fingerprint(data[a - base: b - base])
-        if fp:
-            entries.setdefault(fp, []).append([path, fn[0], a, fn[1]] + comp.get(path, default))
+        if not path.endswith(".c"):
+            continue
+        # every function of the file (tools/regroup.py merges them into real files): candidate_source keeps
+        # only the one that is needed
+        for fa in range(a, b, 4):
+            fn = funcs.get(fa)
+            if not fn or fa + fn[1] > b:
+                continue
+            fp = donorlib.fingerprint(data[fa - base: fa + fn[1] - base])
+            if fp:
+                entries.setdefault(fp, []).append([path, fn[0], fa, fn[1]] + comp.get(path, default))
     d = {"stamp": stamp, "version": ver, "base": base, "entries": entries}
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(json.dumps(d), encoding="utf-8")
