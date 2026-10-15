@@ -314,7 +314,7 @@ def main():
 
         n.rule(
             name="rom_build",
-            command=f"{DSD} {DSD_BASE_FLAGS} rom build --config $in --rom $out $arm7_bios_flag"
+            command=f"{PYTHON} tools/rom_build.py {DSD} {DSD_BASE_FLAGS} rom build --config $in --rom $out $arm7_bios_flag"
         )
         n.newline()
 
