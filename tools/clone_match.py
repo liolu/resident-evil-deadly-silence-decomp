@@ -365,6 +365,7 @@ def check(img: Image, name: str, source: str, profile: str) -> str:
             return "other functions in the object"
         code = obj.section_bytes(shndx)[off: off + size]
         relocs = {o: (typ, sym, add) for o, typ, sym, add in obj.function_relocs(shndx, off, size)}
+        local = {s[0] for s in obj.syms if s[0] and 0 < s[4] < 0xFF00}  # defined in the object itself
     tw, cw = words(target), words(code)
     for i, (a, b) in enumerate(zip(tw, cw)):
         if 4 * i not in relocs:
@@ -372,6 +373,8 @@ def check(img: Image, name: str, source: str, profile: str) -> str:
                 return f"word {i} differs"
             continue
         typ, sym, add = relocs[4 * i]
+        if sym and sym not in img.addr_of and sym not in local:
+            return f"uses {sym}, which this game does not have (the link would fail)"
         if typ == donorlib.R_ARM_ABS32:
             want = img.addr_of.get(sym)
             if sym and want is not None and a not in (want + add, (want + add) | 1):
@@ -526,6 +529,20 @@ def run(cmd):
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
+def drop(paths: list[Path]) -> None:
+    """Removes integrated files again: their delinks.txt / compilers.txt entries and the sources."""
+    rels = {p.relative_to(ROOT).as_posix() for p in paths}
+    text = am.DELINKS.read_text(encoding="utf-8")
+    for rel in rels:
+        text = re.sub(r"\n" + re.escape(rel) + r":\n    complete\n    \.text[^\n]*\n", "\n", text)
+    am.DELINKS.write_text(text, encoding="utf-8", newline="\n")
+    if am.COMPILERS_TXT.exists():
+        keep = [l for l in am.COMPILERS_TXT.read_text(encoding="utf-8").splitlines(True) if l.split(" ")[0] not in rels]
+        am.COMPILERS_TXT.write_text("".join(keep), encoding="utf-8", newline="\n")
+    for p in paths:
+        p.unlink(missing_ok=True)
+
+
 def integrate_verified(found: list[tuple[str, int, int, str]], log=print) -> list[str]:
     """Adds the matches to src/auto/ + delinks.txt and keeps the ones the ROM accepts. Returns the names kept."""
     backup = am.DELINKS.read_bytes()
@@ -538,6 +555,18 @@ def integrate_verified(found: list[tuple[str, int, int, str]], log=print) -> lis
         run([pc_exe, "run", "clang-format", "--files", *[str(p.relative_to(ROOT)) for p in created]])
     run([sys.executable, "tools/configure.py", project.VERSION])
     verify = run([sys.executable, "tools/match.py", "verify"])
+    for _ in range(5):
+        # A link error names the object that needs a missing symbol: drop those files and build again
+        out = verify.stdout + verify.stderr
+        bad = set(re.findall(r'Referenced from "\w+" in (\w+)\.o', out))
+        bad_paths = [c for c in created if c.stem in bad]
+        if verify.returncode == 0 or not bad_paths:
+            break
+        log(f"link error: dropping {len(bad_paths)} file(s): {', '.join(p.stem for p in bad_paths)}")
+        drop(bad_paths)
+        created = [c for c in created if c not in bad_paths]
+        run([sys.executable, "tools/configure.py", project.VERSION])
+        verify = run([sys.executable, "tools/match.py", "verify"])
     if verify.returncode != 0:
         import find_culprits
         log("verify failed: looking for the files that break the ROM...")
@@ -563,6 +592,23 @@ def integrate_verified(found: list[tuple[str, int, int, str]], log=print) -> lis
     return [p.stem for p in created]
 
 
+def commit(names: list[str], push: bool) -> None:
+    """Commits exactly what this run added (sources, delinks.txt, compilers.txt), never anything else."""
+    files = [f"src/auto/{n}.c" for n in names if (ROOT / "src" / "auto" / f"{n}.c").exists()]
+    cfg = [p.relative_to(ROOT).as_posix() for p in (am.DELINKS, am.COMPILERS_TXT) if p.exists()]
+    run(["git", "add", "--", *files, *cfg])
+    msg = (f"clone_match: {len(names)} matching functions\n\nFunctions with the same code as functions already "
+           "matched in this game or in another of our DS projects (tools/clone_match.py). VERIFY PASSED.\n")
+    r = run(["git", "commit", "-q", "-m", msg, "--", *files, *cfg])
+    if r.returncode:
+        print(f"commit failed: {(r.stdout + r.stderr).strip()[-300:]}")
+        return
+    print("committed")
+    if push and run(["git", "remote"]).stdout.strip():
+        r = run(["git", "push", "-q", "origin", "HEAD"])
+        print("pushed" if r.returncode == 0 else f"push failed: {(r.stdout + r.stderr).strip()[-300:]}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list", action="store_true", help="only write build/clone/families.json")
@@ -573,6 +619,8 @@ def main():
     ap.add_argument("--max", type=int, default=0, help="integrate at most N matches")
     ap.add_argument("-j", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--report", type=Path, help="write the names integrated to this file (one per line)")
+    ap.add_argument("--commit", action="store_true", help="after VERIFY PASSED: commit the new files (and only them)")
+    ap.add_argument("--push", action="store_true", help="with --commit: push when the game has a remote")
     ap.add_argument("--emit", type=Path, help="change nothing: write the matches found to this JSON file "
                                               "([name, size, addr, source]...) for a caller that integrates them")
     args = ap.parse_args()
@@ -609,6 +657,8 @@ def main():
     if args.report:
         args.report.write_text("".join(k + "\n" for k in kept), encoding="utf-8")
     print(f"OK: {len(kept)} functions matched by cloning.")
+    if kept and args.commit:
+        commit(kept, args.push)
     write_families(Image(ROOT), others or other_images())  # the Studio's levels and queue order read it
 
 
