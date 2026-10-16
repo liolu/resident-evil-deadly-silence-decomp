@@ -1,0 +1,27 @@
+# Written by DS Decomp Studio: publishes the objdiff report for ByteMatch (https://bytematch.dev).
+# The report needs the ROM to be built, so the Studio builds it locally and commits it as progress/report.json.gz;
+# this workflow only unpacks it into the artifact ByteMatch expects: <VERSION>_report.
+name: Progress report
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+jobs:
+  report:
+    name: Publish the objdiff report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Unpack the report built by DS Decomp Studio
+        run: |
+          mkdir -p out
+          if [ -f progress/report.json.gz ]; then gunzip -c progress/report.json.gz > out/report.json; fi
+
+      - name: Upload the report
+        if: hashFiles('out/report.json') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ABHE_report
+          path: out/report.json
