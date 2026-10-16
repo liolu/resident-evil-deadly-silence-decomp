@@ -551,18 +551,23 @@ def integrate_verified(found: list[tuple[str, int, int, str]], log=print) -> lis
     created = am.integrate(found)
     journal_created(created)
     pc_exe = __import__("shutil").which("pre-commit")
-    if pc_exe:
-        run([pc_exe, "run", "clang-format", "--files", *[str(p.relative_to(ROOT)) for p in created]])
+    if pc_exe:  # in chunks: a command line of a thousand paths is too long for Windows (WinError 206)
+        rels = [str(p.relative_to(ROOT)) for p in created]
+        for k in range(0, len(rels), 100):
+            run([pc_exe, "run", "clang-format", "--files", *rels[k:k + 100]])
     run([sys.executable, "tools/configure.py", project.VERSION])
     verify = run([sys.executable, "tools/match.py", "verify"])
     for _ in range(5):
         # A link error names the object that needs a missing symbol: drop those files and build again
+        # Files the report does not see at 100 % although the ROM is identical (a relocation objdiff reads
+        # differently): auto_match drops them the same way
         out = verify.stdout + verify.stderr
         bad = set(re.findall(r'Referenced from "\w+" in (\w+)\.o', out))
+        bad |= {Path(p).stem for p in re.findall(r"FAIL: (src/auto/\S+?\.c) is marked complete", out)}
         bad_paths = [c for c in created if c.stem in bad]
         if verify.returncode == 0 or not bad_paths:
             break
-        log(f"link error: dropping {len(bad_paths)} file(s): {', '.join(p.stem for p in bad_paths)}")
+        log(f"dropping {len(bad_paths)} file(s) the build or the report rejects: {', '.join(p.stem for p in bad_paths)}")
         drop(bad_paths)
         created = [c for c in created if c not in bad_paths]
         run([sys.executable, "tools/configure.py", project.VERSION])
@@ -596,10 +601,15 @@ def commit(names: list[str], push: bool) -> None:
     """Commits exactly what this run added (sources, delinks.txt, compilers.txt), never anything else."""
     files = [f"src/auto/{n}.c" for n in names if (ROOT / "src" / "auto" / f"{n}.c").exists()]
     cfg = [p.relative_to(ROOT).as_posix() for p in (am.DELINKS, am.COMPILERS_TXT) if p.exists()]
-    run(["git", "add", "--", *files, *cfg])
+    if run(["git", "diff", "--cached", "--quiet"]).returncode:
+        print("commit skipped: other changes are already staged in this repository")
+        return
+    paths = files + cfg
+    for k in range(0, len(paths), 100):  # in chunks: Windows limits the length of a command line
+        run(["git", "add", "--", *paths[k:k + 100]])
     msg = (f"clone_match: {len(names)} matching functions\n\nFunctions with the same code as functions already "
            "matched in this game or in another of our DS projects (tools/clone_match.py). VERIFY PASSED.\n")
-    r = run(["git", "commit", "-q", "-m", msg, "--", *files, *cfg])
+    r = run(["git", "commit", "-q", "-m", msg])  # the index holds only these files (checked above)
     if r.returncode:
         print(f"commit failed: {(r.stdout + r.stderr).strip()[-300:]}")
         return
