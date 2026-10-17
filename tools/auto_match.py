@@ -71,6 +71,7 @@ MAIN_TEXT = project.MAIN_TEXT
 CONTEXT = ROOT / "build" / "auto" / "m2c_context.c"
 
 
+GROUP = int(os.environ.get("AUTO_GROUP", 60))  # functions per grouped first compile (one mwccarm start-up for all)
 FUNCTION_BUDGET = int(os.environ.get("AUTO_BUDGET", 120 if os.environ.get("AUTO_MULTI") else 45))  # seconds spent on one function over all compilers/variants
 
 
@@ -309,7 +310,6 @@ def profiles_for(name: str, size: int, addr: int) -> list[tuple[str, str]]:
 
 def try_function(f: tuple[str, int, int]) -> tuple[str, int, int, str, str]:
     """Tries every compiler; a match with a non-default compiler is tagged with a marker comment."""
-    _M2C.clear()
     first = None
     t0 = time.time()
     for version, extra in profiles_for(*f):
@@ -322,6 +322,95 @@ def try_function(f: tuple[str, int, int]) -> tuple[str, int, int, str, str]:
             return result
         first = first or result
     return first
+
+
+def compile_many(items: list[tuple[str, int, int, str]], mwcc: Path, extra: str = "") -> list[str]:
+    """`compile_and_compare` for sources of DIFFERENT functions, in as few compiler calls as possible (one start-up of
+    about a second for the whole list instead of one per source). items = (name, size, addr, source); returns the status
+    of each. Same rule as compile_batch: the compiler stops at the first file with an error, the rest goes in the next
+    call. A call that times out marks what is left as `compile` (the one-by-one pass tries it again)."""
+    if not items:
+        return []
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        (work / "objs").mkdir()
+        for i, it in enumerate(items):
+            (work / f"v{i}.c").write_text(it[3])
+        result = {}
+        pending = list(range(len(items)))
+        while pending:
+            files = " ".join(f"v{i}.c" for i in pending)
+            cmd = f'"{mwcc}" -O4,p {pc.BASE_FLAGS} {extra} -i "{ROOT / "include"}" -c {files} -o objs'
+            r = run_limited(cmd, cwd=work, shell=True, timeout=30 + len(pending))
+            if r.stderr == "timeout":
+                break
+            missing = []
+            for i in pending:
+                name, size, addr, _ = items[i]
+                obj = work / "objs" / f"v{i}.o"
+                if not obj.exists():
+                    missing.append(i)
+                    continue
+                cand = pc.compiled_function(obj, name)
+                if cand is None:
+                    result[i] = "compile"
+                    continue
+                bad, _ = pc.compare(pc.target_bytes(addr, size), cand)
+                result[i] = "match" if bad == 0 else ("near" if len(cand) == size else "size")
+            if not missing:
+                break
+            result[missing[0]] = "compile"
+            pending = missing[1:]
+        return [result.get(i, "compile") for i in range(len(items))]
+
+
+def grouped_first_pass(group: list[tuple[str, int, int]]) -> dict[str, tuple[str, int, int, str, str]]:
+    """First attempt of a whole group of functions: the plain m2c drafts (both modes) are compiled together, one
+    compiler call per profile. Only the matches are kept; every other function goes through `try_function` as before
+    (m2c output stays in the in-process cache), so the group pass can only save time, never change a result."""
+    drafts = {}  # name -> [source, ...]
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, f in enumerate(group):
+            name = f[0]
+            asm = function_asm(name)
+            if asm is None or ASM_ONLY.search(asm):
+                continue
+            sf = Path(tmp) / f"f{i}.s"
+            sf.write_text(asm + "\n")
+            base = [sys.executable, str(M2C), "-t", "arm-mwcc-c", "--valid-syntax"]
+            attempts = [(base + ["--context", str(CONTEXT), str(sf)], header(name)), (base + [str(sf)], '#include "m2c.h"\n\n')]
+            if os.environ.get("AUTO_ORDER", "noctx_first") == "noctx_first":
+                attempts.reverse()
+            for cmd, head in attempts:
+                r = m2c_cached(name, cmd)
+                if r.returncode != 0 or "M2C_ERROR" in r.stdout:
+                    continue
+                drafts.setdefault(name, []).append(head + fix_byte_offsets(restore_leading_args(r.stdout, name)))
+    won = {}
+    by_profile = {}
+    for f in group:
+        if f[0] in drafts:
+            for prof in profiles_for(*f):
+                by_profile.setdefault(prof, []).append(f)
+    for prof in COMPILERS:
+        fs = [f for f in by_profile.get(prof, []) if f[0] not in won]
+        items = [(f[0], f[1], f[2], src) for f in fs for src in drafts[f[0]]]
+        if not items:
+            continue
+        version, extra = prof
+        for it, st in zip(items, compile_many(items, MWCC_ROOT / version / "mwccarm.exe", extra)):
+            if st == "match" and it[0] not in won:
+                src = it[3] if prof == COMPILERS[0] else f"{MARKER}{version} {extra} */\n" + it[3]
+                won[it[0]] = (it[0], it[1], it[2], "match", src)
+    return won
+
+
+def try_group(group: list[tuple[str, int, int]]) -> list[tuple[str, int, int, str, str]]:
+    """Grouped first pass (AUTO_NO_GROUP=1 turns it off), then the usual one-by-one search for the rest."""
+    won = {} if os.environ.get("AUTO_NO_GROUP") else grouped_first_pass(group)
+    out = [won[f[0]] if f[0] in won else try_function(f) for f in group]
+    _M2C.clear()
+    return out
 
 
 def try_function_with(f: tuple[str, int, int], mwcc: Path, extra: str = "") -> tuple[str, int, int, str, str]:
@@ -1190,7 +1279,9 @@ def main():
         for start in range(0, len(pending), size):
             chunk = pending[start:start + size]
             chunk_results = []
-            for r in pool.imap_unordered(try_function, chunk, chunksize=4):
+            gsize = max(8, min(GROUP, -(-len(chunk) // args.j)))
+            groups = [chunk[g:g + gsize] for g in range(0, len(chunk), gsize)]
+            for r in (x for grp in pool.imap_unordered(try_group, groups) for x in grp):
                 results.append(r)
                 chunk_results.append(r)
                 cache_out.write(json.dumps({"k": keys[r[0]], "v": AUTO_VERSION, "r": list(r)}) + chr(10))
