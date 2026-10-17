@@ -91,6 +91,20 @@ def select_module(target: str) -> str:
     return MODULE
 
 
+def _profile_rec(name):
+    """(start, end) of the `.data` name record of a -profile function (see tools/profnames.py), else None."""
+    global _PROFREC
+    if _PROFREC is None:
+        f = ROOT / "build" / "profnames.json"
+        _PROFREC = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    v = _PROFREC.get(name)
+    return tuple(v["rec"]) if v else None
+
+
+_PROFREC = None
+am.PROFILE_REC = _profile_rec
+
+
 def all_delinks() -> list[Path]:
     return [project.ARM9 / "delinks.txt", project.ARM9 / "itcm" / "delinks.txt"] + sorted(OVL_DIR.glob("ov*/delinks.txt"))
 
@@ -460,7 +474,7 @@ def cmd_submit(a) -> None:
             run([sys.executable, "tools/configure.py", project.VERSION])
             journal_end()
             return out({"ok": False, "error": "the ROM is no longer byte-identical with this file (undone)",
-                        "build": build[-2500:]})
+                        "build": build[-60000:]})
         journal_end()
     pend = load_pending()
     pend.append({"name": f["name"], "file": created[0].relative_to(ROOT).as_posix(), "who": a.who,
@@ -943,7 +957,7 @@ def cmd_split(a) -> None:
             project.SYMBOLS.write_bytes(old)
             journal_end()
             rom_check()
-            return out({"ok": False, "error": "the ROM no longer builds byte-identical: undone", "build": build[-2500:]})
+            return out({"ok": False, "error": "the ROM no longer builds byte-identical: undone", "build": build[-60000:]})
         asm = project.ASM_DIR
         shutil.rmtree(asm, ignore_errors=True)
         run(["ninja", "dis"])

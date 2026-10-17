@@ -1078,6 +1078,9 @@ def freeze(source: str, name: str, protos: dict[str, str]) -> str:
     return marker + '#include "m2c.h"\n#include "engine.h"\n\n' + decls + ("\n" if decls else "") + body
 
 
+PROFILE_REC = None  # set by workbench: name -> (start, end) of the -profile .data record
+
+
 def integrate(found: list[tuple[str, int, int, str]]) -> list[Path]:
     AUTO_SRC.mkdir(parents=True, exist_ok=True)
     created = []
@@ -1087,7 +1090,11 @@ def integrate(found: list[tuple[str, int, int, str]]) -> list[Path]:
         path = AUTO_SRC / f"{name}.c"
         path.write_text(freeze(source, name, protos), encoding="utf-8", newline="\n")
         created.append(path)
-        entries.append(f"\nsrc/auto/{name}.c:\n    complete\n    .text       start:0x{addr:08x} end:0x{addr + size:08x}\n")
+        extra = ""
+        rec = PROFILE_REC(name) if PROFILE_REC else None  # -profile functions own a .data record (their name string)
+        if rec:
+            extra = "    .data       start:0x%08x end:0x%08x\n" % rec
+        entries.append(f"\nsrc/auto/{name}.c:\n    complete\n    .text       start:0x{addr:08x} end:0x{addr + size:08x}\n" + extra)
     with DELINKS.open("a", newline="\n") as f:
         f.writelines(entries)
     # Files matched with another compiler are recorded in compilers.txt (read by tools/configure.py)
