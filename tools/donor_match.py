@@ -539,7 +539,7 @@ def try_one(dn, con, f, syms, log, licenses) -> tuple[str, str] | None:
         pre = preprocessed(dn, repo, rel, profile, incs)
         # Calls the compiler adds by itself (`_u32_div_f`, `_ddiv`...) are not in the source, so they cannot be
         # renamed to the game's symbol: the link would fail
-        implicit = [s for s in rename if pre and not re.search(rf"\b{re.escape(s)}\b", pre)]
+        implicit = [s for s in rename if pre and rename[s] != s and not re.search(rf"\b{re.escape(s)}\b", pre)]
         if implicit:
             log(f"  {name}: {repo}:{dname} skipped (implicit runtime call {implicit[0]})")
             continue
@@ -548,6 +548,9 @@ def try_one(dn, con, f, syms, log, licenses) -> tuple[str, str] | None:
         profiles = [(version, flags)] + alt_profiles(version, flags, style)
         status, source, version, flags = compile_profiles(pre, dname, rename, name, size, addr, profiles)
         log(f"  {name}: {repo}:{rel}:{dname} [{version} {flags}] -> {status}")
+        if os.environ.get('DONOR_DUMP') and source and status != 'match' and not repo.startswith('ntrtwl'):
+            os.makedirs(os.environ['DONOR_DUMP'], exist_ok=True)
+            open(os.path.join(os.environ['DONOR_DUMP'], f'{name}.{status}.c'), 'w', encoding='utf-8').write(f'/* {version} {flags} */\n' + source)
         if status == "match":
             head = (f"{am.MARKER}{version} {flags} */\n"
                     f"/* {dname} from https://github.com/{repo.replace('_', '/', 1)} {rel}"
