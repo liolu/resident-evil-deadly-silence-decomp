@@ -52,6 +52,10 @@ MWCC_ROOT = Path(os.environ.get("MWCCARM", ROOT / "tools" / "mwccarm"))
 # Main compiler first, then the one used for some libraries (see docs/compiler.md)
 # (version, extra flags): profiles found in this game, most common first (see docs/compiler.md)
 COMPILERS = [("2.0/sp1p5", ""), ("1.2/sp2p3", ""), ("1.2/sp2p3", "-proc arm7tdmi")]
+# Other mwccarm builds to try, e.g. AUTO_EXTRA_PROFILES="1.2/sp3,1.2/sp4" (Heroes of Mana: 1.2/sp3 builds code that ends in
+# `pop {.., pc}` and keeps `sub sp` instead of the `push r3` pad, which 2.0 and 1.2/sp2p3 do not produce).
+EXTRA_PROFILES = [(v.strip(), "") for v in os.environ.get("AUTO_EXTRA_PROFILES", "").split(",") if v.strip()]
+COMPILERS += [c for c in EXTRA_PROFILES if c not in COMPILERS]
 MWCC = MWCC_ROOT / COMPILERS[0][0] / "mwccarm.exe"
 COMPILERS_TXT = project.COMPILERS_TXT
 MARKER = "/* compiler: "
@@ -141,7 +145,7 @@ def function_asm(name: str) -> str | None:
     global _ASM
     if _ASM is None:
         _ASM = "\n".join(f.read_text(encoding="utf-8") for f in ASM_DIR.glob("*.s"))
-    m = re.search(rf"^{re.escape(name)}: .*?^\s+arm_func_end {re.escape(name)}$", _ASM, re.S | re.M)
+    m = re.search(rf"^{re.escape(name)}: .*?^\s+(?:arm|thumb)_func_end {re.escape(name)}$", _ASM, re.S | re.M)
     return m.group(0) if m else None
 
 
@@ -149,7 +153,7 @@ def neighbours(names: set[str]) -> set[str]:
     """Functions calling or called by `names` (bl / b / blx to a symbol, from the disassembly)."""
     function_asm("")  # loads the disassembly
     out = set()
-    for m in re.finditer(r"^(\w+): ; 0x[0-9a-f]+\n(.*?)^\s+arm_func_end \1$", _ASM, re.S | re.M):
+    for m in re.finditer(r"^(\w+): ; 0x[0-9a-f]+\n(.*?)^\s+(?:arm|thumb)_func_end \1$", _ASM, re.S | re.M):
         callees = set(re.findall(r"^\s+(?:blx|bl|b)(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le)?\s+(\w+)\s*$",
                                  m.group(2), re.M))
         callees = {c for c in callees if not re.fullmatch(r"r\d+|lr|ip|sp|pc", c) and not c.startswith("_L")}
@@ -194,7 +198,7 @@ def fix_byte_offsets(source: str) -> str:
 
 
 # Instructions the compiler never generates: functions using them were written in assembly
-ASM_ONLY = re.compile(r"^\s+(swpb?|mrs|msr|mcr|mrc|ldc|stc|cdp)\b", re.M)
+ASM_ONLY = re.compile(r"^\s+(swpb?|mrs|msr|mcr|mrc|ldc|stc|cdp|svc|swi)\b", re.M)
 
 
 def asm_function(name: str, asm: str) -> str | None:
@@ -289,9 +293,9 @@ def profiles_for(name: str, size: int, addr: int) -> list[tuple[str, str]]:
         return COMPILERS
     style = code_style(addr, size)
     if style == "v20":
-        return [c for c in COMPILERS if c[0].startswith("2.")]
+        return [c for c in COMPILERS if c[0].startswith("2.") or c in EXTRA_PROFILES]
     if style == "v12":
-        return [c for c in COMPILERS if c[0].startswith("1.")]
+        return [c for c in COMPILERS if c[0].startswith("1.") and c not in EXTRA_PROFILES or c in EXTRA_PROFILES]
     return COMPILERS
 
 

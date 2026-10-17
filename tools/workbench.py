@@ -22,6 +22,7 @@ Only ARM functions of the main module are handled, like auto_match.
 import argparse
 import bisect
 import json
+import os
 import re
 import shutil
 import struct
@@ -42,6 +43,58 @@ from pipeline_lock import journal_begin, journal_created, journal_end, pipeline_
 WORK = ROOT / "build" / "workbench"
 PENDING = WORK / "pending.json"
 RELOCS = project.ARM9 / "relocs.txt" if hasattr(project, "ARM9") else project.SYMBOLS.parent / "relocs.txt"
+
+# ---------------------------------------------------------------- overlays: every command works on the module (main or
+# overlay) that holds the function; select_module() rebinds the per-module paths of project/auto_match/probe_compiler
+OVL_DIR = project.ARM9 / "overlays"
+_OVL_INDEX = None
+MODULE = "main"
+
+
+def overlay_index() -> dict[str, int]:
+    """{symbol name: overlay id} for every overlay (names are unique: func_ovNNN_..., data_ovNNN_...)."""
+    global _OVL_INDEX
+    if _OVL_INDEX is None:
+        _OVL_INDEX = {}
+        for d in sorted(OVL_DIR.glob("ov*")) if OVL_DIR.exists() else []:
+            f = d / "symbols.txt"
+            if f.exists():
+                for m in re.finditer(r"^(\S+) kind:", f.read_text(encoding="utf-8", errors="replace"), re.M):
+                    _OVL_INDEX.setdefault(m.group(1), int(d.name[2:]))
+        f = project.ARM9 / "itcm" / "symbols.txt"  # the ITCM module is handled like an overlay (id -1)
+        if f.exists():
+            for m in re.finditer(r"^(\S+) kind:", f.read_text(encoding="utf-8", errors="replace"), re.M):
+                _OVL_INDEX.setdefault(m.group(1), -1)
+    return _OVL_INDEX
+
+
+def select_module(target: str) -> str:
+    """Points the tools at the module of `target` (a symbol name or 0xADDR of an overlay function)."""
+    global RELOCS, _SYMS, _RELOCS, MODULE
+    ov = overlay_index().get(target) if not target.startswith("0x") else None
+    if ov is None:
+        return "main"
+    d = project.ARM9 / "itcm" if ov < 0 else OVL_DIR / f"ov{ov:03d}"
+    head = (d / "delinks.txt").read_text(encoding="utf-8").split("\n\n", 1)[0]
+    m = re.search(r"\.text\s+start:0x([0-9a-f]+) end:0x([0-9a-f]+)", head)
+    first = re.search(r"start:0x([0-9a-f]+)", head)
+    text = (int(m.group(1), 16), int(m.group(2), 16))
+    project.SYMBOLS, project.DELINKS = d / "symbols.txt", d / "delinks.txt"
+    am.SYMBOLS, am.DELINKS, pc.SYMBOLS = project.SYMBOLS, project.DELINKS, project.SYMBOLS
+    am.MAIN_TEXT = text
+    pc.ARM9_BIN = (project.EXTRACT / "arm9" / "itcm.bin" if ov < 0
+                   else project.EXTRACT / "arm9_overlays" / f"ov{ov:03d}.bin")
+    pc.ARM9_BASE = int(first.group(1), 16)
+    RELOCS = d / "relocs.txt"
+    _SYMS = _RELOCS = None
+    MODULE = "itcm" if ov < 0 else f"ov{ov:03d}"
+    return MODULE
+
+
+def all_delinks() -> list[Path]:
+    return [project.ARM9 / "delinks.txt", project.ARM9 / "itcm" / "delinks.txt"] + sorted(OVL_DIR.glob("ov*/delinks.txt"))
+
+
 STD_HEAD = '#include "m2c.h"\n#include "engine.h"\n#include "m2c_protos.h"\n'
 
 
@@ -140,9 +193,32 @@ def relocs_in(start: int, end: int) -> list[tuple[int, str, int, str]]:
     return r[i:j]
 
 
+_OTHER = {}
+
+
+def other_module_symbol(addr: int, module: str) -> str | None:
+    """Name of the symbol at `addr` in another module (main, overlay(N), overlays(N,M)...), if it has one."""
+    if module == "main":
+        f = project.ARM9 / "symbols.txt"
+    else:
+        m = re.match(r"overlays?\((\d+)", module)
+        if not m:
+            return None
+        f = OVL_DIR / f"ov{int(m.group(1)):03d}" / "symbols.txt"
+    if f not in _OTHER:
+        d = {}
+        for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+            mm = SYM.match(line)
+            if mm and mm.group(2) != "label":
+                d[int(mm.group(4), 16)] = mm.group(1)
+        _OTHER[f] = d
+    return _OTHER[f].get(addr)
+
+
 def name_at(addr: int, module: str = "main") -> str:
-    if module != "main":
-        return f"0x{addr:08x} ({module})"
+    own = MODULE if MODULE in ("main", "itcm") else f"overlay({int(MODULE[2:])})"
+    if module != own:
+        return other_module_symbol(addr, module) or f"0x{addr:08x} ({module})"
     c = containing(addr)
     if not c:
         return f"0x{addr:08x}"
@@ -237,7 +313,7 @@ def cmd_info(a) -> None:
         draft, origin = starting_draft(a.name)
     out({"name": f["name"], "addr": f"0x{f['addr']:08x}", "size": size, "mode": f["mode"],
          "matched": bool(src_file), "file": src_file, "auto_tools": f["mode"] == "arm",
-         "profiles": [f"{v} {e}".strip() for v, e in am.profiles_for(f["name"], size, f["addr"])],
+         "profiles": ([f"{v} {e} -thumb".replace("  ", " ") for v, e in am.COMPILERS] if f["mode"] == "thumb" else [f"{v} {e}".strip() for v, e in am.profiles_for(f["name"], size, f["addr"])]),
          "asm_only": bool(am.ASM_ONLY.search(am.function_asm(f["name"]) or "")),
          "asm": am.function_asm(f["name"]) or "", "draft": draft or "", "draft_from": origin,
          "lines": pc.disasm(pc.target_bytes(f["addr"], size), f["addr"]),  # objdump text: look-alike search
@@ -295,7 +371,11 @@ def judge(name: str, source: str, profile: str | None = None) -> dict:
         why = fake_match(source, base + "\n" + STD_HEAD + f"#define M2C_SELF_{name}\n")
         if why:
             return {"status": "refused", "match": False, "why": f"fake match: {why}. Write plain C only."}
-    profiles = [profile] if profile else [f"{v} {e}".strip() for v, e in am.profiles_for(name, size, addr)]
+    thumb = f["mode"] == "thumb"
+    if thumb:
+        profiles = [profile] if profile else [f"{v} {e} -thumb".replace("  ", " ") for v, e in am.COMPILERS]
+    else:
+        profiles = [profile] if profile else [f"{v} {e}".strip() for v, e in am.profiles_for(name, size, addr)]
     target = pc.target_bytes(addr, size)
     best = None
     for prof in profiles:
@@ -309,12 +389,14 @@ def judge(name: str, source: str, profile: str | None = None) -> dict:
                     r = {"status": "compile", "match": False, "profile": prof,
                          "errors": f"{name} is not in the object (renamed? static?)"}
                 else:
-                    bad, n = pc.compare(target, cand)
+                    bad, n = pc.compare_thumb(target, cand, addr) if thumb else pc.compare(target, cand)
                     st = "match" if bad == 0 else ("near" if len(cand) == size else "size")
                     r = {"status": st, "match": bad == 0, "profile": prof, "diffs": bad, "total": n,
                          "size": len(cand), "target_size": size}
                     if bad:
-                        r["diff"] = compact_diff(pc.disasm(target, addr), pc.disasm(cand, addr))
+                        r["diff"] = compact_diff(pc.disasm(target, addr, thumb), pc.disasm(cand, addr, thumb))
+                        if os.environ.get("WB_FULL"):  # both listings, for tools/mdiff.py (structural diff)
+                            r["full"] = {"t": pc.disasm(target, addr, thumb), "c": pc.disasm(cand, addr, thumb)}
         finally:
             tmp.cleanup()
         rank = lambda x: ({"match": 0, "near": 1, "size": 2, "compile": 3}[x["status"]], x.get("diffs", 0))  # noqa
@@ -389,13 +471,103 @@ def cmd_submit(a) -> None:
          "next": "ROM byte-identical. `commit` runs the full verify once for all pending matches."})
 
 
+def cmd_submit_many(a) -> None:
+    """Submits every exact match of a batch_try results.json at once: one build for all (fallback: one by one)."""
+    d = Path(a.dir)
+    res = json.loads((d / "results.json").read_text(encoding="utf-8"))
+    todo = [n for n, r in res.items() if r.get("match") and not r.get("submit")][: a.limit or None]
+    items = []
+    for n in todo:
+        select_module(n)
+        f = function(n)
+        if covered(f["addr"]):
+            continue
+        if not am.MAIN_TEXT[0] <= f["addr"] < am.MAIN_TEXT[1]:  # .init / other code sections: not a .text file
+            res[n]["submit"] = "not in .text"
+            continue
+        src = (d / f"{n}.c").read_text(encoding="utf-8", errors="replace")
+        r = judge(n, src, res[n]["profile"])
+        if r["match"]:
+            if r["profile"] != f"{am.COMPILERS[0][0]} {am.COMPILERS[0][1]}".strip() and not src.startswith(am.MARKER):
+                src = f"{am.MARKER}{r['profile']} */\n" + src
+            items.append((MODULE, f, src))
+    import find_culprits
+    done = []
+    state = {"build": ""}
+    files = [project.ARM9 / "delinks.txt", project.ARM9 / "itcm" / "delinks.txt", *sorted(OVL_DIR.glob("ov*/delinks.txt")), am.COMPILERS_TXT]
+
+    def attempt(group):
+        """Integrates `group` and builds once: kept if the ROM is byte-identical, undone otherwise."""
+        saved = {p: p.read_bytes() if p.exists() else None for p in files}
+        journal_begin(files)
+        created = []
+        for mod, f, src in group:
+            select_module(f["name"])
+            created += am.integrate([(f["name"], f["size"], f["addr"], src)])
+        journal_created(created)
+        clang_format(created)
+        build = find_culprits.build()
+        if find_culprits.rom_ok(build):
+            journal_end()
+            return created
+        state["build"] = build
+        for p, b in saved.items():
+            if b is None:
+                p.unlink(missing_ok=True)
+            else:
+                p.write_bytes(b)
+        for p in created:
+            p.unlink(missing_ok=True)
+        run([sys.executable, "tools/configure.py", project.VERSION])
+        journal_end()
+        return None
+
+    def solve(group):
+        """[(item, created path)] for the items that can be kept: failing overlays are split and retried."""
+        if not group:
+            return []
+        created = attempt(group)
+        if created is not None:
+            return list(zip(group, created))
+        bad_ov = set(re.findall(r"Check overlay (\d+): checksum failed", state["build"]))
+        if len(group) == 1:
+            return []
+        if bad_ov:
+            bad = [g for g in group if g[0] in {f"ov{int(n):03d}" for n in bad_ov}]
+            rest = [g for g in group if g not in bad]
+            if rest and bad:
+                return solve(rest) + solve(bad)
+        half = len(group) // 2
+        return solve(group[:half]) + solve(group[half:])
+
+    with pipeline_lock("workbench"):
+        kept = solve(items)
+        pend = load_pending()
+        for (mod, f, src), path in kept:
+            pend.append({"name": f["name"], "file": path.relative_to(ROOT).as_posix(), "who": a.who,
+                         "time": time.strftime("%Y-%m-%d %H:%M")})
+            res[f["name"]]["submit"] = True
+            done.append(f["name"])
+        for mod, f, src in items:
+            if f["name"] not in done:
+                res[f["name"]]["submit"] = "ROM differs"
+        save_pending(pend)
+    (d / "results.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+    out({"ok": True, "submitted": len(done), "failed": len(items) - len(done), "pending": len(pend)})
+
+
 def drop_files(rels: list[str]) -> None:
-    """Takes files out of delinks.txt / compilers.txt and deletes them (matches the verify rejected)."""
-    text = project.DELINKS.read_text(encoding="utf-8")
+    """Takes files out of delinks.txt (main and overlays) / compilers.txt and deletes them (matches the verify
+    rejected)."""
+    for dl in all_delinks():
+        text = dl.read_text(encoding="utf-8")
+        new = text
+        for rel in rels:
+            new = re.sub(rf"\n*^{re.escape(rel)}:\n(?:[ \t]+.*\n?)+", "\n", new, flags=re.M)
+        if new != text:
+            dl.write_text(new.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
     for rel in rels:
-        text = re.sub(rf"\n*^{re.escape(rel)}:\n(?:[ \t]+.*\n?)+", "\n", text, flags=re.M)
         (ROOT / rel).unlink(missing_ok=True)
-    project.DELINKS.write_text(text.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
     if am.COMPILERS_TXT.exists():
         lines = am.COMPILERS_TXT.read_text(encoding="utf-8").splitlines(keepends=True)
         am.COMPILERS_TXT.write_text("".join(l for l in lines if l.split(" ", 1)[0] not in rels), encoding="utf-8",
@@ -430,9 +602,12 @@ def cmd_commit(a) -> None:
         names = [p["name"] for p in pend]
         if names:
             who = ", ".join(sorted({p.get("who") or "workbench" for p in pend}))
-            run(["git", "add", "--", *paths])
+            for i in range(0, len(paths), 100):  # the command line is limited (Windows): add in chunks
+                run(["git", "add", "--", *paths[i:i + 100]])
             msg = f"Match {len(names)} function(s) ({who})\n\n" + "\n".join(names) + "\n"
-            c = run(["git", "commit", "-q", "-m", msg, "--", *paths])
+            WORK.mkdir(parents=True, exist_ok=True)
+            (WORK / "commit_msg.txt").write_text(msg, encoding="utf-8", newline="\n")
+            c = run(["git", "commit", "-q", "-F", str(WORK / "commit_msg.txt")])
             if c.returncode:
                 return out({"ok": False, "error": "git commit failed", "git": (c.stdout + c.stderr)[-1500:]})
     save_pending([])
@@ -800,6 +975,8 @@ def main():
         p.set_defaults(fn=fn)
     p = sub.add_parser("commit"); p.add_argument("--push", action="store_true"); p.set_defaults(fn=cmd_commit)  # noqa
     sub.add_parser("pending").set_defaults(fn=cmd_pending)
+    p = sub.add_parser("submit-many"); p.add_argument("dir"); p.add_argument("--who", default="")  # noqa: E702
+    p.add_argument("--limit", type=int, default=0); p.set_defaults(fn=cmd_submit_many)  # noqa: E702
     p = sub.add_parser("data"); p.add_argument("target"); p.set_defaults(fn=cmd_data)  # noqa: E702
     p = sub.add_parser("datacheck"); p.add_argument("file"); p.set_defaults(fn=cmd_datacheck)  # noqa: E702
     p = sub.add_parser("header"); p.add_argument("header"); p.add_argument("new"); p.set_defaults(fn=cmd_header)  # noqa
@@ -810,6 +987,9 @@ def main():
     p.add_argument("--new-name")
     p.set_defaults(fn=cmd_split)
     a = ap.parse_args()
+    key = getattr(a, "name", None) or getattr(a, "target", None)
+    if key and a.cmd in ("info", "judge", "submit", "data", "split"):
+        select_module(key)
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(errors="replace")

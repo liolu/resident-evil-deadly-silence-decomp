@@ -13,6 +13,7 @@ Each prototype is guarded by `M2C_SELF_<name>` so that the file defining a funct
 header without redeclaring itself with a different type.
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -96,7 +97,8 @@ def main():
     PROTOS.write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
     CONTEXT.parent.mkdir(parents=True, exist_ok=True)
-    pre = subprocess.run(["gcc", "-E", "-P", "-I", str(ROOT / "include"), "-x", "c", str(PROTOS)],
+    # CPP overrides the preprocessor (e.g. the arm-none-eabi gcc when no host gcc is installed)
+    pre = subprocess.run([os.environ.get("CPP", "gcc"), "-E", "-P", "-I", str(ROOT / "include"), "-x", "c", str(PROTOS)],
                          capture_output=True, text=True, check=True).stdout
     # m2c cannot use macros: M2C_FIELD only exists in drafts, never in declarations
     CONTEXT.write_text(pre, encoding="utf-8", newline="\n")

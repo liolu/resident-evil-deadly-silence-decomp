@@ -294,6 +294,32 @@ def rename(source: str, names: dict[str, str]) -> str:
     return IDENT.sub(sub, source)
 
 
+OR_NUM = re.compile(r"\(?(0[xX][0-9a-fA-F]+|\d+)\)?\s*\|\s*(0[xX][0-9a-fA-F]+|\d+)\b")
+
+
+def or_variants(source: str, nums: dict[int, set[int]]) -> list[str]:
+    """Sources where `BASE | OFFSET` expressions (e.g. `(0x04000000) | 0x8`, a register address built by OR) take
+    the twin's value: the twin's loaded word is the OR of the same base and another offset. One site per line."""
+    lines = source.split("\n")
+    variants = [source]
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith(("#", "/*", "//")):
+            continue
+        for m in OR_NUM.finditer(line):
+            a, b = int(m.group(1), 0), int(m.group(2), 0)
+            v = a | b
+            if v not in nums or nums[v] == {v}:
+                continue
+            for n in sorted(nums[v]):
+                if n & a != a or n ^ a == b:
+                    continue
+                new = list(lines)
+                new[i] = line[:m.start(2)] + f"0x{n ^ a:x}" + line[m.end(2):]
+                variants.append("\n".join(new))
+            break  # one OR site per line
+    return variants[:MAX_COMBOS]
+
+
 def with_constants(source: str, nums: dict[int, set[int]]) -> list[str]:
     """Sources where the C literals are replaced by the twin's values. A literal whose value maps to several values
     gives one source per choice (at most MAX_COMBOS sources in all)."""
@@ -462,7 +488,7 @@ def search(img: Image, others: list[Image], only_sources: set[str] | None, jobs:
                     continue
                 names, nums = pm
                 profile = im.profile(path)
-                for cand in with_constants(rename(base, names), nums):
+                for cand in (c for v in or_variants(rename(base, names), nums) for c in with_constants(v, nums)):
                     if not check(img, n, cand, profile):
                         return n, cand, kind, f"{im.root.name}:{s}" if im is not img else s, profile
             return None

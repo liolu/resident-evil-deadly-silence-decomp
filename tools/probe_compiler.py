@@ -79,6 +79,10 @@ def compare(target: bytes, cand: bytes) -> tuple[int, int]:
     for i, (a, b) in enumerate(zip(tw, cw)):
         if i in pool:
             continue
+        if (a & 0xFE000000) == 0xFA000000:  # blx (ARM -> Thumb callee): the linker turns a bl into it
+            a = 0xEB000000
+        if (a & 0xFE000000) == 0xFA000000:  # blx (ARM -> Thumb callee): the linker turns a bl into it
+            a = 0xEB000000
         if (a & 0x0F000000) == 0x0B000000:  # bl: only compare condition/opcode
             a &= 0xFF000000
             b &= 0xFF000000
@@ -87,14 +91,14 @@ def compare(target: bytes, cand: bytes) -> tuple[int, int]:
     return (bad, n)
 
 
-def disasm(code: bytes, addr: int) -> list[str]:
+def disasm(code: bytes, addr: int, thumb: bool = False) -> list[str]:
     objdump = shutil.which("arm-none-eabi-objdump")
     if objdump is None:
         return ["(arm-none-eabi-objdump not found in PATH)"]
     with tempfile.TemporaryDirectory() as tmp:
         f = Path(tmp) / "code.bin"
         f.write_bytes(code)
-        r = subprocess.run([objdump, "-D", "-b", "binary", "-marm", f"--adjust-vma={addr}", str(f)],
+        r = subprocess.run([objdump, "-D", "-b", "binary", "-marm", *(["-Mforce-thumb"] if thumb else []), f"--adjust-vma={addr}", str(f)],
                            capture_output=True, text=True)
     out = []
     for line in r.stdout.splitlines():
@@ -164,3 +168,28 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def compare_thumb(target: bytes, cand: bytes, addr: int = 0) -> tuple[int, int]:
+    """(differing halfwords, total) for Thumb code. Masks the literal pool (ldr rX,[pc,#imm] targets) and the two
+    halfwords of bl/blx (the linker fills the offset)."""
+    n = len(target) // 2
+    if len(cand) != len(target):
+        return (n, n)
+    tw = struct.unpack(f"<{n}H", target)
+    cw = struct.unpack(f"<{n}H", cand)
+    pool = set()
+    for i, w in enumerate(tw):
+        if (w & 0xF800) == 0x4800:  # ldr rX, [pc, #imm8*4]
+            word = ((addr + i * 2 + 4) & ~3) + (w & 0xFF) * 4 - addr
+            pool.add(word // 2)
+            pool.add(word // 2 + 1)
+    bad = 0
+    for i, (a, b) in enumerate(zip(tw, cw)):
+        if i in pool:
+            continue
+        if (a & 0xF800) in (0xF000, 0xF800, 0xE800) and (b & 0xF800) in (0xF000, 0xF800, 0xE800):
+            continue  # bl / blx halves (the linker turns bl into blx for an ARM callee)
+        if a != b:
+            bad += 1
+    return bad, n
