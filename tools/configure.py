@@ -25,10 +25,13 @@ args = parser.parse_args()
 if args.dsd is None and (Path(__file__).resolve().parent.parent / "dsd-dsi.exe").exists():
     # dsd built with DSi-enhanced ROM support (decomp ds/_src/ds-decomp, branch dsi-enhanced) until it is released
     args.dsd = os.path.join(".", "dsd-dsi.exe")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import reloc_fixes  # per-game fix of false pointers: does nothing without config/<version>/reloc_fixes.txt
+reloc_fixes.apply(Path(__file__).resolve().parent.parent, args.version, quiet=True)
 
 
 # Config
-GAME = "resident_evil_deadly_silence"
+GAME = "heroes_of_mana"
 DSD_VERSION = 'v0.12.1'
 WIBO_VERSION = '0.6.16'
 SJISWRAP_VERSION = 'v1.2.2'
