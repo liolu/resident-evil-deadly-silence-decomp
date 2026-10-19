@@ -20,27 +20,44 @@ parser.add_argument('-w', type=str, default=DEFAULT_WIBO_PATH, dest="wine", requ
 parser.add_argument("--compiler", type=Path, required=False, help="Path to pre-installed compiler root directory (default: $MWCCARM, else tools/mwccarm)")
 parser.add_argument("--no-extract", action="store_true", help="Skip extract step")
 parser.add_argument("--dsd", type=Path, required=False, help="Path to pre-installed dsd CLI")
+parser.add_argument("--objdiff", type=Path, help="Path to pre-installed objdiff CLI")
+parser.add_argument("--sjiswrap", type=Path, help="Path to pre-installed sjiswrap executable")
 parser.add_argument('version', help='Game version')
 args = parser.parse_args()
 if args.dsd is None and (Path(__file__).resolve().parent.parent / "dsd-dsi.exe").exists():
     # dsd built with DSi-enhanced ROM support (decomp ds/_src/ds-decomp, branch dsi-enhanced) until it is released
     args.dsd = os.path.join(".", "dsd-dsi.exe")
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reloc_fixes  # per-game fix of false pointers: does nothing without config/<version>/reloc_fixes.txt
 reloc_fixes.apply(Path(__file__).resolve().parent.parent, args.version, quiet=True)
 
 
+# Per-game settings: game.toml at the project root (optional, never touched by the tool sync). Everything else is shared.
+_ROOT = Path(__file__).resolve().parent.parent
+try:
+    import tomllib
+    GAME_CFG = tomllib.loads((_ROOT / "game.toml").read_text(encoding="utf-8")) if (_ROOT / "game.toml").exists() else {}
+except Exception as e:  # a broken file must not silently change the compiler
+    raise SystemExit(f"game.toml unreadable: {e}")
+
+
+def _game_name() -> str:
+    """ROM base name, from <GAME>_<version>.sha1 (same rule as tools/project.py), else the folder name."""
+    for p in _ROOT.glob(f"*_{args.version}.sha1"):
+        return p.name[:-len(f"_{args.version}.sha1")]
+    return _ROOT.name.replace("-", "_")
+
+
 # Config
-GAME = "resident_evil_deadly_silence"
+GAME = GAME_CFG.get("game") or _game_name()
 DSD_VERSION = 'v0.12.1'
 WIBO_VERSION = '0.6.16'
 SJISWRAP_VERSION = 'v1.2.2'
 OBJDIFF_VERSION = 'v3.8.2'
-MWCC_VERSION = "2.0/sp1p5"
-DECOMP_ME_COMPILER = "mwcc_30_131"
+MWCC_VERSION = GAME_CFG.get("mwcc_version", "2.0/sp1p5")
+DECOMP_ME_COMPILER = GAME_CFG.get("decomp_me_compiler", "mwcc_30_131")
 CC_FLAGS = " ".join([
-    "-O4,p",                # Optimize maximally for performance
+    GAME_CFG.get("opt", "-O4,p"),  # Optimization level (game.toml: opt)
     "-enum int",            # Use int-sized enums
     "-char signed",         # Char type is signed
     "-str noreuse",         # Equivalent strings are different objects
@@ -48,7 +65,7 @@ CC_FLAGS = " ".join([
     "-gccext,on",           # Enable GCC extensions
     "-fp soft",             # Compute float operations in software
     "-inline noauto",       # Inline only functions marked with 'inline'
-    "-lang=c",              # TODO: C++ games need -lang=c++
+    f"-lang={GAME_CFG.get('lang', 'c')}",  # game.toml: lang = "c" or "c++"
     "-Cpp_exceptions off",  # Disable C++ exceptions
     "-RTTI off",            # Disable runtime type information
     "-interworking",        # Enable ARM/Thumb interworking
@@ -57,6 +74,7 @@ CC_FLAGS = " ".join([
     "-gccinc",              # Interpret #include "..." and #include <...> equally
     "-nolink",              # Do not link
     "-msgstyle gcc",        # Use GCC-like messages (some IDEs will make file names clickable)
+    *GAME_CFG.get("extra_cc_flags", []),
 ])
 # Passed to all modules and final arm9.o link
 LD_FLAGS = " ".join([
@@ -122,8 +140,8 @@ if platform is None:
 EXE = platform.exe
 WINE = args.wine if platform.system != "windows" else ""
 DSD = str(args.dsd or os.path.join('.', str(root_path / f"dsd{EXE}")))
-OBJDIFF = os.path.join('.', str(root_path / f"objdiff-cli{EXE}"))
-SJISWRAP = os.path.join('.', "sjiswrap.exe")
+OBJDIFF = str(args.objdiff or os.path.join('.', str(root_path / f"objdiff-cli{EXE}")))
+SJISWRAP = str(args.sjiswrap or os.path.join('.', "sjiswrap.exe"))
 CC = os.path.join('.', str(mwcc_path / "mwccarm.exe"))
 LD = os.path.join('.', str(mwcc_path / "mwldarm.exe"))
 PYTHON = sys.executable
@@ -290,7 +308,7 @@ def main():
         mwcc_implicit = [SJISWRAP]
         if platform.system != "windows":
             transform_dep = "tools/transform_dep.py"
-            mwcc_cmd += f" && $python {transform_dep} $basefile.d $basefile.d"
+            mwcc_cmd += f" && {PYTHON} {transform_dep} $basefile.d $basefile.d"
             mwcc_implicit.append(transform_dep)
             if WINE == DEFAULT_WIBO_PATH:
                 mwcc_implicit.append(WINE)
@@ -411,17 +429,18 @@ def add_download_tool_builds(n: ninja_syntax.Writer, project: Project):
         )
         n.newline()
 
-    downloads.append(OBJDIFF)
-    n.build(
-        rule="download_tool",
-        outputs=OBJDIFF,
-        variables={
-            "tool": "objdiff",
-            "tag": OBJDIFF_VERSION,
-            "path": OBJDIFF,
-        }
-    )
-    n.newline()
+    if args.objdiff is None:
+        downloads.append(OBJDIFF)
+        n.build(
+            rule="download_tool",
+            outputs=OBJDIFF,
+            variables={
+                "tool": "objdiff",
+                "tag": OBJDIFF_VERSION,
+                "path": OBJDIFF,
+            }
+        )
+        n.newline()
 
     if args.compiler is None:
         downloads.extend([CC, LD])
@@ -449,16 +468,17 @@ def add_download_tool_builds(n: ninja_syntax.Writer, project: Project):
         )
         n.newline()
 
-    downloads.append(SJISWRAP)
-    n.build(
-        rule="download_tool",
-        outputs=SJISWRAP,
-        variables={
-            "tool": "sjiswrap",
-            "tag": SJISWRAP_VERSION,
-            "path": SJISWRAP,
-        }
-    )
+    if args.sjiswrap is None:
+        downloads.append(SJISWRAP)
+        n.build(
+            rule="download_tool",
+            outputs=SJISWRAP,
+            variables={
+                "tool": "sjiswrap",
+                "tag": SJISWRAP_VERSION,
+                "path": SJISWRAP,
+            }
+        )
 
     n.build(
         inputs=downloads,
@@ -524,7 +544,7 @@ def add_mwld_and_rom_builds(n: ninja_syntax.Writer, project: Project):
     rom_file = project.build_rom()
     n.build(
         inputs=rom_config_file,
-        implicit=DSD,
+        implicit=[DSD, "tools/rom_build.py", "tools/banner_fix.py"],
         rule="rom_build",
         outputs=rom_file,
     )

@@ -14,13 +14,17 @@ overlay is left to dsd.
 After the build:
   - the banner icon (banner_fix.py: palettes with the same colour twice);
   - empty files: Nintendo's tool gave them another address than dsd does (Tom and Jerry Tales: structor3/adf/...).
-    They hold no data, so their FAT entry takes the original address back.
+    They hold no data, so their FAT entry takes the original address back;
+  - the recorded secure-area CRC, when no BIOS was supplied and the secure area
+    is unchanged. dsd otherwise writes zero; the header CRC is then recomputed.
 """
 import re
 import struct
 import subprocess
 import sys
 from pathlib import Path
+
+from ndspy import _common
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -134,6 +138,30 @@ def empty_files_fix(orig: bytes, rom: bytearray) -> int:
     return n
 
 
+def secure_area_crc_fix(orig: bytes, rom: bytearray) -> bool:
+    """Preserve missing checksum metadata only for an unchanged secure area.
+
+    The decrypted input still records the encrypted secure area's checksum.
+    Without a BIOS, the builder cannot recompute it. Preserve that field only
+    when the secure area, game code and ARM9 location agree with the input.
+    Recompute the header CRC so other header changes are not hidden.
+    """
+    if min(len(orig), len(rom)) < 0x8000:
+        return False
+    if u32(orig, 0x20) != 0x4000 or u32(rom, 0x20) != 0x4000:
+        return False
+    if orig[0x0c:0x10] != rom[0x0c:0x10] or orig[0x4000:0x8000] != rom[0x4000:0x8000]:
+        return False
+    recorded = struct.unpack_from("<H", orig, 0x6c)[0]
+    if not recorded or struct.unpack_from("<H", rom, 0x6c)[0] != 0:
+        return False
+    if _common.crc16(orig[:0x15e]) != struct.unpack_from("<H", orig, 0x15e)[0]:
+        return False
+    struct.pack_into("<H", rom, 0x6c, recorded)
+    struct.pack_into("<H", rom, 0x15e, _common.crc16(rom[:0x15e]))
+    return True
+
+
 def main():
     cmd = sys.argv[1:]
     if "--config" in cmd:
@@ -153,7 +181,12 @@ def main():
             e = empty_files_fix(orig, rom)
             if e:
                 print(f"rom_build: {e} empty files given their original address back")
-            if n > 0 or e:
+            has_bios = any(arg == "--arm7-bios" or arg.startswith("--arm7-bios=") or arg.startswith("-7")
+                           for arg in cmd)
+            c = not has_bios and secure_area_crc_fix(orig, rom)
+            if c:
+                print("rom_build: preserved recorded secure-area CRC for unchanged secure area; recomputed header CRC")
+            if n > 0 or e or c:
                 rom_path.write_bytes(rom)
 
 
