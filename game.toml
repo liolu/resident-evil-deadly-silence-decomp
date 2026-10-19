@@ -1,0 +1,6 @@
+# Per-game build settings read by tools/configure.py (shared by every game). Delete a key to get the default.
+game = "resident_evil_deadly_silence"
+mwcc_version = "2.0/sp1p5"   # default compiler; single files can differ in config/<version>/compilers.txt
+opt = "-O4,p"
+lang = "c"                   # "c++" for C++ games
+extra_cc_flags = []
