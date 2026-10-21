@@ -134,8 +134,7 @@ def compile_check(text: str, part, compiler: str) -> str:
 
 
 def default_compiler() -> str:
-    m = re.search(r'^MWCC_VERSION\s*=\s*"([^"]+)"', (ROOT / "tools" / "configure.py").read_text(), re.M)
-    return m.group(1) if m else "2.0/sp1p5"
+    return project.configure_value("MWCC_VERSION", "2.0/sp1p5")
 
 
 FUNCS: dict[str, tuple[int, int]] = {}

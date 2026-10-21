@@ -23,7 +23,6 @@ of the main module that is not in a source file yet:
 Functions are tried in parallel (-j).
 """
 import argparse
-import ast
 import json
 import os
 import re
@@ -86,8 +85,7 @@ def alt_profiles(version: str, flags: str, style: str) -> list[tuple[str, str]]:
 
 def _build_cc_flags() -> str:
     """CC_FLAGS of tools/configure.py, read from its source (importing it would run the configuration)."""
-    m = re.search(r'^CC_FLAGS = " "\.join\((\[.*?\])\)', (ROOT / "tools" / "configure.py").read_text(), re.M | re.S)
-    return " ".join(ast.literal_eval(m.group(1))) if m else ""
+    return project.configure_value("CC_FLAGS", "")
 
 
 BUILD_CC_FLAGS = _build_cc_flags()
@@ -380,9 +378,7 @@ def _project_index(game_dir: Path) -> dict | None:
         if line:
             path, ver_, *flags = line.split()
             comp[path] = [ver_, " ".join(flags)]
-    m = re.search(r'^MWCC_VERSION\s*=\s*"([^"]+)"', (game_dir / "tools" / "configure.py").read_text(), re.M) \
-        if (game_dir / "tools" / "configure.py").exists() else None
-    default = [m.group(1) if m else "2.0/sp1p5", ""]
+    default = [project.configure_value("MWCC_VERSION", "2.0/sp1p5", game_dir), ""]
     entries = {}
     for path, a, b in re.findall(r"^(src/\S+):\n\s+complete\n\s+\.text\s+start:0x([0-9a-f]+) end:0x([0-9a-f]+)",
                                  dl.read_text(), re.M):

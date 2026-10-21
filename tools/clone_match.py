@@ -19,7 +19,6 @@ become sources of the next round. Then they go to src/auto/ + delinks.txt, and `
 (files that break it are removed with find_culprits, like auto_match does).
 """
 import argparse
-import ast
 import hashlib
 import itertools
 import json
@@ -52,15 +51,7 @@ MAX_COMBOS = 32  # C files tried per pair when constants are ambiguous
 # ---------------------------------------------------------------- one project (this game or another one)
 
 def _configure_value(root: Path, var: str, default: str) -> str:
-    try:
-        text = (root / "tools" / "configure.py").read_text(encoding="utf-8")
-    except OSError:
-        return default
-    if var == "CC_FLAGS":
-        m = re.search(r'^CC_FLAGS = " "\.join\((\[.*?\])\)', text, re.M | re.S)
-        return " ".join(ast.literal_eval(m.group(1))) if m else default
-    m = re.search(rf'^{var} = "([^"]*)"', text, re.M)
-    return m.group(1) if m else default
+    return project.configure_value(var, default, root)
 
 
 class Image:

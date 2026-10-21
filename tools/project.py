@@ -49,3 +49,27 @@ def _main_text() -> tuple[int, int]:
 
 
 MAIN_TEXT = _main_text()
+
+
+def configure_value(var: str, default: str = "", root: Path = ROOT) -> str:
+    """Value of a string setting of <root>/tools/configure.py (CC_FLAGS, MWCC_VERSION...) without running it.
+
+    The assignment is evaluated alone with GAME_CFG = <root>/game.toml, so both the old hard-coded configure.py and
+    the shared one (values from game.toml) give the flags ninja really uses. Works for another project's root too."""
+    import ast
+    try:
+        tree = ast.parse((root / "tools" / "configure.py").read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return default
+    cfg = {}
+    if (root / "game.toml").exists():
+        import tomllib
+        cfg = tomllib.loads((root / "game.toml").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == var for t in node.targets):
+            try:
+                value = eval(compile(ast.Expression(node.value), "configure.py", "eval"), {"__builtins__": {}, "GAME_CFG": cfg})
+            except Exception:
+                return default
+            return value if isinstance(value, str) else default
+    return default
