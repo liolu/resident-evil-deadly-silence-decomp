@@ -55,6 +55,9 @@ WIBO_VERSION = '0.6.16'
 SJISWRAP_VERSION = 'v1.2.2'
 OBJDIFF_VERSION = 'v3.8.2'
 MWCC_VERSION = GAME_CFG.get("mwcc_version", "2.0/sp1p5")
+# Language of the .c files (game.toml: lang = "c" or "c++"); .cpp files are always C++. Passed per file, never in
+# CC_FLAGS: mwccarm given two different -lang flags keeps C whatever their order, so a global one blocks .cpp files.
+C_LANG = GAME_CFG.get("lang", "c")
 DECOMP_ME_COMPILER = GAME_CFG.get("decomp_me_compiler", "mwcc_30_131")
 CC_FLAGS = " ".join([
     GAME_CFG.get("opt", "-O4,p"),  # Optimization level (game.toml: opt)
@@ -65,7 +68,6 @@ CC_FLAGS = " ".join([
     "-gccext,on",           # Enable GCC extensions
     "-fp soft",             # Compute float operations in software
     "-inline noauto",       # Inline only functions marked with 'inline'
-    f"-lang={GAME_CFG.get('lang', 'c')}",  # game.toml: lang = "c" or "c++"
     "-Cpp_exceptions off",  # Disable C++ exceptions
     "-RTTI off",            # Disable runtime type information
     "-interworking",        # Enable ARM/Thumb interworking
@@ -96,7 +98,7 @@ ARM9_LD_FLAGS = " ".join([
 DSD_OBJDIFF_ARGS = " ".join([
     "--scratch",                        # Metadata for creating decomp.me scratches
     f"--compiler {DECOMP_ME_COMPILER}", # decomp.me compiler name
-    f'--c-flags "{CC_FLAGS}"',            # decomp.me compiler flags
+    f'--c-flags "{CC_FLAGS} -lang={C_LANG}"',            # decomp.me compiler flags
     "--custom-make ninja",              # Command for rebuilding files
 ])
 DSD_BASE_FLAGS = " ".join([
@@ -592,7 +594,7 @@ def add_mwcc_builds(n: ninja_syntax.Writer, project: Project, mwcc_implicit: lis
         if is_cpp(source_file):
             cc_flags.append("-lang=c++")
         elif is_c(source_file):
-            cc_flags.append("-lang=c")
+            cc_flags.append(f"-lang={C_LANG}")
         n.build(
             inputs=str(source_file),
             implicit=mwcc_implicit + [cc],
