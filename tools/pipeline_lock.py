@@ -26,7 +26,9 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from project import ROOT  # noqa: E402  (the game, also when this runs from studio/gametools: one lock per game)
+
 LOCK = ROOT / "build" / "pipeline.lock"
 JOURNAL = ROOT / "build" / "pipeline.journal.json"
 
