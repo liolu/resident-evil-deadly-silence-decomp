@@ -73,7 +73,7 @@ Known errors, their cause and the fix. Add an entry every time you solve a new p
 **The permuter keeps running after its time limit / worker processes stay alive (Windows)**
 - Cause: `taskkill /T` needs WMI; on some Windows installs WMI is broken (`Invalid provider registration` /
   `Inscription du fournisseur non valide`), so only the parent process was stopped.
-- Fix: `tools/permute.py` kills the process tree with `psutil` (`pip install psutil`).
+- Fix: `gametools/permute.py` kills the process tree with `psutil` (`pip install psutil`).
 
 **The permuter fails to compile anything when started from PowerShell**
 - Cause: `bash` resolves to `C:\Windows\System32\bash.exe` (WSL) instead of Git Bash.
@@ -81,7 +81,7 @@ Known errors, their cause and the fix. Add an entry every time you solve a new p
 
 **`unknown relocation type 'R_ARM_V4BX'` in the permuter**
 - Cause: GNU as targets ARMv4 by default and tags every `bx` with a V4BX relocation.
-- Fix: assemble the target with `-mcpu=arm946e-s` (done by `tools/permute.py`).
+- Fix: assemble the target with `-mcpu=arm946e-s` (done by `gametools/permute.py`).
 
 **Assembly functions no longer compile after `pre-commit` (`add r2, r0, #0x2 swpb r0, r1, [r2] bx lr`)**
 - Cause: clang-format joins the instructions of an `asm` function on one line.

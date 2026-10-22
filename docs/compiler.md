@@ -34,7 +34,7 @@ About 220 functions (mostly around `0x0200xxxx`-`0x0201xxxx` and `0x020bxxxx`) s
 `-O4,p`, never with 2.0. These are probably libraries built separately.
 
 Files built with another compiler are listed in `config/usa/compilers.txt` (`<source path> <version>`), read by
-`tools/configure.py`. `tools/auto_match.py` tries 2.0/sp1p5 first, then 1.2/sp2p3, and records the files that need 1.2.
+`tools/configure.py`. `gametools/auto_match.py` tries 2.0/sp1p5 first, then 1.2/sp2p3, and records the files that need 1.2.
 
 ## `pop {..., lr}` + `bx lr` epilogues are 1.2 too
 
