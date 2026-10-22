@@ -135,6 +135,37 @@ def non_ascii_files() -> list[str]:
     return bad
 
 
+PROFNAMES = ROOT / "build" / "profnames.json"
+
+
+def load_profnames() -> dict:
+    """{function: {"rec": [start, end], "end4": padded end}} for the -profile functions (tools/profpad.py)."""
+    try:
+        return json.loads(PROFNAMES.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def profile_padding(unit: dict, section: dict, profnames: dict) -> bool:
+    """PROFILE PADDING: a -profile function owns a `.data` record (its name, len+1 bytes) that the original linker
+    padded to 4 bytes. workbench delinks the record as [start, end4) because that links byte-identically, while the
+    compiled object only holds the len+1 name bytes: objdiff then reports the `.data` section at 2n/(n+m). Every
+    record byte still matches and the padding is zero (profpad only adds end4 when it is), so this exact difference
+    is accepted -- and nothing else."""
+    if section.get("name") != ".data":
+        return False
+    rec = profnames.get(Path(unit["metadata"].get("source_path", "")).stem)
+    if not rec or "end4" not in rec:
+        return False
+    start, end = rec["rec"]
+    length = end - start
+    target = int(section.get("size", 0))
+    if target != rec["end4"] - start:
+        return False
+    expected = 200.0 * length / (length + target)
+    return abs(float(section.get("fuzzy_match_percent", 0)) - expected) < 0.01
+
+
 def cmd_verify(args):
     ok = True
     r = run(["ninja"])
@@ -146,10 +177,11 @@ def cmd_verify(args):
     else:
         print(f"OK  : ROM is byte-identical ({project.ROM_NAME}: OK)")
     report = build_report()
+    profnames = load_profnames()
     for u in source_units(report):
         if u["metadata"].get("complete"):
             for s in u.get("sections", []):
-                if float(s.get("fuzzy_match_percent", 0)) < 100.0:
+                if float(s.get("fuzzy_match_percent", 0)) < 100.0 and not profile_padding(u, s, profnames):
                     print(f"FAIL: {u['metadata'].get('source_path')} is marked complete but {s['name']} is "
                           f"{float(s.get('fuzzy_match_percent', 0)):.2f}%")
                     ok = False

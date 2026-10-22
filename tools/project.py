@@ -7,10 +7,33 @@ unchanged in every DS project (their single source is the `gametools/` folder of
     GAME        the ROM base name: <GAME>_<VERSION>.nds (from <GAME>_<VERSION>.sha1)
     MAIN_TEXT   (start, end) of the .text section of the ARM9 main module (from delinks.txt)
 """
+import os
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def _is_project(p: Path) -> bool:
+    return (p / "game.toml").exists() or any(p.glob("config/*/arm9/symbols.txt"))
+
+
+def _root() -> Path:
+    """The game the tools work on: $DSD_PROJECT, else the game this file is copied into (<game>/tools/), else the
+    current folder or one of its parents (the matching tools run from studio/gametools/ with cwd = the game)."""
+    if os.environ.get("DSD_PROJECT"):
+        return Path(os.environ["DSD_PROJECT"]).resolve()
+    here = Path(__file__).resolve().parent.parent
+    if _is_project(here):
+        return here
+    cwd = Path.cwd().resolve()
+    for p in (cwd, *cwd.parents):
+        if _is_project(p):
+            return p
+    raise SystemExit(f"No DS project in {cwd} or its parents: run the tool from projets/<game>/ "
+                     "(or set DSD_PROJECT).")
+
+
+ROOT = _root()
+TOOLS = Path(__file__).resolve().parent  # where the matching tools live (studio/gametools/, or <game>/tools/)
 
 
 def _version() -> str:
