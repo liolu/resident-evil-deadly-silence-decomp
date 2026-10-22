@@ -3,9 +3,9 @@
 Everything that does not need a human is scripted. A human (or an assistant) only writes C code; the tools build,
 check, suggest drafts, brute-force near matches and publish.
 
-Only the build tools are in this repo (\	ools/\: configure, ROM rebuild, \match.py\, \probe_compiler.py\).
-The matching tools (\gametools/...\ below) live in [DS Decomp Studio](https://github.com/liolu/ds-decomp-studio)
-and run from this folder: \python ../../studio/gametools/auto_match.py\ (or set \DSD_PROJECT\ to this folder).
+Only the build tools are in this repo (`tools/`: configure, ROM rebuild, `match.py`, `probe_compiler.py`).
+The matching tools (`gametools/...` below) live in [DS Decomp Studio](https://github.com/liolu/ds-decomp-studio)
+and run from this folder: `python ../../studio/gametools/auto_match.py` (or set `DSD_PROJECT` to this folder).
 
 | Tool | What it automates |
 |---|---|
