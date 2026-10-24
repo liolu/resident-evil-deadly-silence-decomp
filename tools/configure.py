@@ -16,7 +16,7 @@ DEFAULT_WIBO_PATH = "./wibo"
 
 
 parser = argparse.ArgumentParser(description="Generates build.ninja")
-parser.add_argument('-w', type=str, default=DEFAULT_WIBO_PATH, dest="wine", required=False, help="Path to Wine/Wibo (linux only)")
+parser.add_argument('-w', type=str, default=DEFAULT_WIBO_PATH, dest="wine", required=False, help="Path to Wine/Wibo (Linux and macOS)")
 parser.add_argument("--compiler", type=Path, required=False, help="Path to pre-installed compiler root directory (default: $MWCCARM, else tools/mwccarm)")
 parser.add_argument("--no-extract", action="store_true", help="Skip extract step")
 parser.add_argument("--dsd", type=Path, required=False, help="Path to pre-installed dsd CLI")
@@ -51,7 +51,7 @@ def _game_name() -> str:
 # Config
 GAME = GAME_CFG.get("game") or _game_name()
 DSD_VERSION = 'v0.12.1'
-WIBO_VERSION = '0.6.16'
+WIBO_VERSION = '1.2.0' if sys.platform == 'darwin' else '0.6.16'
 SJISWRAP_VERSION = 'v1.2.2'
 OBJDIFF_VERSION = 'v3.8.2'
 MWCC_VERSION = GAME_CFG.get("mwcc_version", "2.0/sp1p5")
@@ -308,6 +308,12 @@ def main():
         # $cc is set per source file (see compiler_overrides)
         mwcc_cmd = f'{WINE} {SJISWRAP} "$cc" {CC_FLAGS} {CC_INCLUDES} $cc_flags $cc_extra -d $game_version -MD -c $in -o $basedir'
         mwcc_implicit = [SJISWRAP]
+        if platform.system == "macos":
+            # ASCII is byte-identical in UTF-8 and Shift-JIS. The Mac wrapper
+            # enforces that contract before running the unchanged compiler.
+            wrapper = "tools/macos_compiler.py"
+            mwcc_cmd = f'{PYTHON} {wrapper} {WINE} "$cc" {CC_FLAGS} {CC_INCLUDES} $cc_flags $cc_extra -d $game_version -MD -c $in -o $basedir'
+            mwcc_implicit = [wrapper]
         if platform.system != "windows":
             transform_dep = "tools/transform_dep.py"
             mwcc_cmd += f" && {PYTHON} {transform_dep} $basefile.d $basefile.d"
