@@ -141,9 +141,13 @@ if platform is None:
     exit(1)
 EXE = platform.exe
 WINE = args.wine if platform.system != "windows" else ""
-DSD = str(args.dsd or os.path.join('.', str(root_path / f"dsd{EXE}")))
-OBJDIFF = str(args.objdiff or os.path.join('.', str(root_path / f"objdiff-cli{EXE}")))
-SJISWRAP = str(args.sjiswrap or os.path.join('.', "sjiswrap.exe"))
+def tool_path(path) -> str:
+    # Path("./dsd") prints as "dsd", which subprocess and Ninja look up in PATH: keep the "./" on relative paths
+    path = str(path)
+    return path if os.path.isabs(path) else os.path.join('.', path)
+DSD = tool_path(args.dsd or root_path / f"dsd{EXE}")
+OBJDIFF = tool_path(args.objdiff or root_path / f"objdiff-cli{EXE}")
+SJISWRAP = tool_path(args.sjiswrap or "sjiswrap.exe")
 CC = os.path.join('.', str(mwcc_path / "mwccarm.exe"))
 LD = os.path.join('.', str(mwcc_path / "mwldarm.exe"))
 PYTHON = sys.executable
