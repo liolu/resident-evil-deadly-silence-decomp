@@ -339,7 +339,8 @@ def main():
 
         n.rule(
             name="mwld",
-            command=f'{WINE} "{LD}" {LD_FLAGS} $extra_ld_flags @$objects_file $lcf_file -o $out'
+            # ld_align.py: halfword-aligned objects (Thumb stubs at addr % 4 == 2) despite dsd's ALIGNALL(4)
+            command=f'{PYTHON} tools/ld_align.py {WINE} "{LD}" {LD_FLAGS} $extra_ld_flags @$objects_file $lcf_file -o $out'
         )
         n.newline()
 
@@ -523,7 +524,7 @@ def add_mwld_and_rom_builds(n: ninja_syntax.Writer, project: Project):
     if len(objects_to_link) > 0:
         n.build(
             inputs=[*objects_to_link, lcf_file, objects_file],
-            implicit=LD,
+            implicit=[LD, "tools/ld_align.py"],
             rule="mwld",
             outputs=elf_file,
             variables={
