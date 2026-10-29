@@ -218,6 +218,9 @@ def cmd_verify(args):
     for u in source_units(report):
         if u["metadata"].get("complete"):
             for s in u.get("sections", []):
+                # objdiff does not diff .ctor (no fuzzy_match_percent at all): the byte-identical ROM is the proof
+                if s["name"] == ".ctor" and "fuzzy_match_percent" not in s and ok:
+                    continue
                 if float(s.get("fuzzy_match_percent", 0)) < 100.0 and not profile_padding(u, s, profnames):
                     print(f"FAIL: {u['metadata'].get('source_path')} is marked complete but {s['name']} is "
                           f"{float(s.get('fuzzy_match_percent', 0)):.2f}%")

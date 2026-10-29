@@ -19,18 +19,35 @@ import re, shutil, struct, subprocess, sys
 from pathlib import Path
 
 
-def ranges():
-    """{object basename: (start, end)} of .text ranges from every delinks.txt (sources only)."""
+def ranges(section='.text'):
+    """{object basename: (start, end)} of one section's ranges from every delinks.txt (sources only)."""
     out = {}
     for d in Path('config').glob('**/delinks.txt'):
         cur = None
         for line in d.read_text(encoding='utf-8').splitlines():
             if line and not line.startswith((' ', '\t')) and line.rstrip().endswith(':'):
                 cur = Path(line.rstrip()[:-1]).stem + '.o'
-            m = re.match(r'\s+\.text\s+start:0x([0-9a-fA-F]+)\s+end:0x([0-9a-fA-F]+)', line)
+            m = re.match(r'\s+' + re.escape(section) + r'\s+start:0x([0-9a-fA-F]+)\s+end:0x([0-9a-fA-F]+)', line)
             if m and cur:
                 out[cur] = (int(m.group(1), 16), int(m.group(2), 16))
     return out
+
+
+def set_align(src: Path, dst: Path, aligns: dict):
+    """Copy an ELF object with the alignment of some sections changed ({section name: alignment})."""
+    b = bytearray(src.read_bytes())
+    if b[:4] != b'\x7fELF' or b[4] != 1:
+        raise SystemExit(f'ld_align: {src} is not a 32-bit ELF')
+    shoff, = struct.unpack_from('<I', b, 0x20)
+    shentsize, shnum, shstrndx = struct.unpack_from('<HHH', b, 0x2E)
+    stroff = struct.unpack_from('<I', b, shoff + shstrndx * shentsize + 16)[0]
+    for i in range(shnum):
+        h = shoff + i * shentsize
+        name_off = struct.unpack_from('<I', b, h)[0]
+        name = bytes(b[stroff + name_off:b.index(0, stroff + name_off)]).decode()
+        if name in aligns:
+            struct.pack_into('<I', b, h + 32, aligns[name])
+    dst.write_bytes(bytes(b))
 
 
 def set_text_align(src: Path, dst: Path, align: int):
@@ -66,27 +83,35 @@ def main():
             need.add(o)
         if e % 4 == 2 and k + 1 < len(text_objs):
             need.add(text_objs[k + 1])
+    # {object: {section: alignment}}: .text halfword objects above, plus data objects (one object per odd/halfword
+    # .bss/.data/.rodata symbol, e.g. a `struct { u8 b[N]; }` at an odd address) whose range starts off 4
+    aligns = {o: {'.text': 2} for o in need}
+    for sec in ('.data', '.rodata', '.bss', '.sbss'):
+        for o, (s, e) in ranges(sec).items():
+            if s % 4:
+                aligns.setdefault(o, {})[sec] = 2 if s % 2 == 0 else 1
     symfile = Path('config') / lcf.parent.name / 'arm9' / 'lcf_symbols.txt'
     extra = [l.strip() for l in symfile.read_text(encoding='utf-8').splitlines()
              if l.strip() and not l.strip().startswith('#')] if symfile.exists() else []
-    if not need and not extra:
+    if not aligns and not extra:
         sys.exit(subprocess.call(cmd))
     out = lcf.parent / 'ld_align'; out.mkdir(exist_ok=True)
     paths = [p.strip() for p in objfile.read_text(encoding='utf-8').splitlines() if p.strip()]
     new_paths = []
     for p in paths:
         name = Path(p.strip('"')).name
-        if name in need:
+        if name in aligns:
             dst = out / name
-            set_text_align(Path(p.strip('"')), dst, 2)
+            set_align(Path(p.strip('"')), dst, aligns[name])
             new_paths.append(f'"{dst}"')
         else:
             new_paths.append(p)
     new_lcf = []
     for l in lcf_lines:
-        m = re.match(r'(\s*)(\S+\.o)\(\.text\)\s*$', l)
-        if m and m.group(2) in need:
-            new_lcf += [f'{m.group(1)}ALIGNALL(2);', l, f'{m.group(1)}ALIGNALL(4);']
+        m = re.match(r'(\s*)(\S+\.o)\((\.\w+)\)\s*$', l)
+        a = aligns.get(m.group(2), {}).get(m.group(3)) if m else None
+        if a:
+            new_lcf += [f'{m.group(1)}ALIGNALL({a});', l, f'{m.group(1)}ALIGNALL(4);']
         else:
             new_lcf.append(l)
         if extra and l.strip() == 'SECTIONS {':
