@@ -38,4 +38,3 @@ data_027e0240 kind:data(any) addr:0x027e0240
 data_027e0242 kind:data(any) addr:0x027e0242
 data_027e0244 kind:data(any) addr:0x027e0244
 data_027e0248 kind:data(any) addr:0x027e0248
-data_027e027d kind:data(any) addr:0x027e027d

@@ -1,5 +1,5 @@
 from:0x01ff800c kind:load to:0x02127bf4 module:main
-from:0x01ff801c kind:load to:0x02127bf6 module:main
+from:0x01ff801c kind:load to:0x02127bf4 add:0x2 module:main
 from:0x01ff8030 kind:arm_call_thumb to:0x01ff8010 module:itcm
 from:0x01ff803c kind:arm_call_thumb to:0x01ff8000 module:itcm
 from:0x01ff80d4 kind:arm_call to:0x02117e68 module:main
@@ -327,7 +327,7 @@ from:0x01ffaa24 kind:load to:0x02139ee4 module:main
 from:0x01ffaa28 kind:load to:0x02137ee4 module:main
 from:0x01ffaa2c kind:load to:0x02144b84 module:main
 from:0x01ffaa30 kind:load to:0x02144bd4 module:main
-from:0x01ffaa34 kind:load to:0x02137ef2 module:main
+from:0x01ffaa34 kind:load to:0x02137ee4 add:0xe module:main
 from:0x01ffaa38 kind:load to:0x02137ef4 module:main
 from:0x01ffaabc kind:arm_call to:0x020a2198 module:main
 from:0x01ffab50 kind:arm_call to:0x01ffaa3c module:itcm

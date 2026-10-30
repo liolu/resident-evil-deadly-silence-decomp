@@ -1,0 +1,19 @@
+/* compiler: 2.0/sp1p5 */
+#include "m2c.h"
+
+extern u8 func_020d260c[];
+extern u8 func_020d2654[];
+extern u8 func_020d27d4[];
+extern u8 func_020d2804[];
+
+const u32 data_02126534[3]  = {0x0014569E, 0x0064569E, 0xFFFFFFFF};
+const u32 data_02126540[4]  = {(u32) &func_020d2804, (u32) &func_020d260c, (u32) &func_020d27d4, (u32) &func_020d2654};
+const u32 data_02126550[19] = {0x739F7BDF, 0x631F6B5F, 0x529F5ADF, 0x421F4A5F, 0x319F39DF, 0x295F295F, 0x295F295F,
+                               0x295F295F, 0x295F295F, 0x319F295F, 0x421F39DF, 0x529F4A5F, 0x631F5ADF, 0x739F6B5F,
+                               0x739F739F, 0x739F739F, 0x739F739F, 0x739F739F, 0x0000739F};
+const u32 data_0212659c[42] = {0x00000000, 0xFFFFFFF1, 0x00000046, 0xF95C0000, 0x00000000, 0x00005800, 0xFFFFFFB0,
+                               0x00000000, 0x00000000, 0xC0008000, 0x00008000, 0x00011364, 0x00000000, 0x000000FA,
+                               0x00000000, 0x00000000, 0x00000AAA, 0x00005000, 0xFFFFFFD0, 0x00000057, 0xFFFFFF26,
+                               0xC0008000, 0x00008000, 0x0000C000, 0xFFFFFFD0, 0x00000000, 0xFFFFFF26, 0xC0008000,
+                               0x00008000, 0x0000C000, 0xFFFFFFD0, 0xFFFFFFA9, 0xFFFFFF26, 0xC0008000, 0x00008000,
+                               0x0000C000, 0xFFFFFFD0, 0xFFFFFF52, 0xFFFFFF26, 0xC0008000, 0x00008000, 0x0000C000};

@@ -1,0 +1,4 @@
+/* compiler: 2.0/sp1p5 */
+#include "m2c.h"
+
+const u32 data_02120bac[2] = {0x14020401, 0x00000001};
