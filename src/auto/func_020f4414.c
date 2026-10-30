@@ -1,0 +1,49 @@
+/* compiler: 1.2/sp2p3 -O4,p -lang c99 -inline on,noauto */
+/* func_0206a538 from https://github.com/GoldieLeGenie/DQIV-DECOMP libs/NitroSystem/src/g3d/g3d_kernel.c (license: none),
+ * reused by tools/donor_match.py */
+typedef unsigned int u32;
+typedef unsigned short u16;
+typedef unsigned char u8;
+typedef int s32;
+typedef s32 BOOL;
+typedef struct UnkResAnmHeader {
+    u8 unk_00;
+    u8 unk_01;
+    u16 unk_02;
+} UnkResAnmHeader;
+typedef void (*UnkAnmFunc)(void *result, struct UnkAnmObj *anm, u32 dataIdx);
+typedef struct UnkAnmObj {
+    s32 unk_00;
+    s32 unk_04;
+    UnkResAnmHeader *unk_08;
+    UnkAnmFunc unk_0c;
+    struct UnkAnmObj *unk_10;
+    void *unk_14;
+    u8 unk_18;
+    u8 unk_19;
+    u16 unk_1a[1];
+} UnkAnmObj;
+BOOL func_020f4414(UnkAnmObj **list, UnkAnmObj *anm) {
+    UnkAnmObj *q;
+    UnkAnmObj *p = *list;
+
+    if (p == 0) {
+        return 0;
+    }
+    if (p == anm) {
+        *list       = p->unk_10;
+        anm->unk_10 = 0;
+        return 1;
+    }
+    q = p->unk_10;
+    while (q != 0) {
+        if (q == anm) {
+            p->unk_10 = q->unk_10;
+            q->unk_10 = 0;
+            return 1;
+        }
+        p = q;
+        q = q->unk_10;
+    }
+    return 0;
+}
