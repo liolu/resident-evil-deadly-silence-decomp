@@ -15,7 +15,7 @@ OS code loads from its literal pool) right after `SECTIONS {`.
 Then it runs the linker command with the lcf / @objects arguments replaced. Nothing to do -> runs it unchanged.
 Inputs are never modified (no ninja dirty loop).
 """
-import re, shutil, struct, subprocess, sys
+import bisect, re, shutil, struct, subprocess, sys
 from pathlib import Path
 
 
@@ -95,6 +95,19 @@ def main():
              if l.strip() and not l.strip().startswith('#')] if symfile.exists() else []
     if not aligns and not extra:
         sys.exit(subprocess.call(cmd))
+    # a symbol inside a data object (struct field named by matched C, prototypes/fieldgap.py) goes right after that
+    # object in the lcf: mwld binds an absolute symbol set outside a section to an arbitrary one (dsd check symbols)
+    inner, spans = {}, sorted((s, e, o, sec) for sec in ('.data', '.rodata', '.bss', '.sbss') for o, (s, e) in ranges(sec).items())
+    outer = []
+    for x in extra:
+        v = re.fullmatch(r'\S+\s*=\s*0x([0-9a-fA-F]+);', x)
+        ad = int(v.group(1), 16) if v else None
+        hit = next((sp for sp in spans[max(bisect.bisect_right(spans, (ad, 1 << 32)) - 1, 0):][:1] if sp[0] <= ad < sp[1]), None) if v else None
+        if hit:
+            inner.setdefault((hit[2], hit[3]), []).append(x)
+        else:
+            outer.append(x)
+    extra = outer
     out = lcf.parent / 'ld_align'; out.mkdir(exist_ok=True)
     paths = [p.strip() for p in objfile.read_text(encoding='utf-8').splitlines() if p.strip()]
     new_paths = []
@@ -114,6 +127,8 @@ def main():
             new_lcf += [f'{m.group(1)}ALIGNALL({a});', l, f'{m.group(1)}ALIGNALL(4);']
         else:
             new_lcf.append(l)
+        if m and (m.group(2), m.group(3)) in inner:
+            new_lcf += [m.group(1) + x for x in inner[(m.group(2), m.group(3))]]
         if extra and l.strip() == 'SECTIONS {':
             new_lcf += ['    ' + x for x in extra]
             extra = []

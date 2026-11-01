@@ -21174,3 +21174,11 @@ src/data/main_rodata_02127bd2.c:
 src/data/main_rodata_02127bd3.c:
     complete
     .rodata     start:0x02127bd3 end:0x02127bf4
+
+src/data/main_rodata_0211d028.c:
+    complete
+    .rodata     start:0x0211d028 end:0x0211d124
+
+src/data/main_rodata_02125614.c:
+    complete
+    .rodata     start:0x02125614 end:0x0212575c
