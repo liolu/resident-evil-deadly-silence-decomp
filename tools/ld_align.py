@@ -86,7 +86,7 @@ def main():
     # {object: {section: alignment}}: .text halfword objects above, plus data objects (one object per odd/halfword
     # .bss/.data/.rodata symbol, e.g. a `struct { u8 b[N]; }` at an odd address) whose range starts off 4
     aligns = {o: {'.text': 2} for o in need}
-    for sec in ('.data', '.rodata', '.bss', '.sbss'):
+    for sec in ('.data', '.rodata', '.bss', '.sbss', '.exception', '.exceptix', '.ctor'):
         for o, (s, e) in ranges(sec).items():
             if s % 4:
                 aligns.setdefault(o, {})[sec] = 2 if s % 2 == 0 else 1
@@ -97,12 +97,23 @@ def main():
         sys.exit(subprocess.call(cmd))
     # a symbol inside a data object (struct field named by matched C, prototypes/fieldgap.py) goes right after that
     # object in the lcf: mwld binds an absolute symbol set outside a section to an arbitrary one (dsd check symbols)
-    inner, spans = {}, sorted((s, e, o, sec) for sec in ('.data', '.rodata', '.bss', '.sbss') for o, (s, e) in ranges(sec).items())
+    # overlays share addresses: only the objects of the symbol's overlay (ovNNN_data_X.o, data_ovNNN_X) are looked at
+    inner, spans = {}, {}
+    for sec in ('.data', '.rodata', '.bss', '.sbss', '.exception', '.exceptix', '.ctor'):
+        for o, (s, e) in ranges(sec).items():
+            tag = re.match(r'ov\d+(?=_)', o)
+            spans.setdefault(tag[0] if tag else '', []).append((s, e, o, sec))
+    for v in spans.values():
+        v.sort()
     outer = []
     for x in extra:
-        v = re.fullmatch(r'\S+\s*=\s*0x([0-9a-fA-F]+);', x)
-        ad = int(v.group(1), 16) if v else None
-        hit = next((sp for sp in spans[max(bisect.bisect_right(spans, (ad, 1 << 32)) - 1, 0):][:1] if sp[0] <= ad < sp[1]), None) if v else None
+        v = re.fullmatch(r'(\S+)\s*=\s*0x([0-9a-fA-F]+);', x)
+        hit = None
+        if v:
+            ad, tag = int(v.group(2), 16), re.search(r'_(ov\d+)_', v.group(1))
+            sp = spans.get(tag[1] if tag else '', [])
+            i = bisect.bisect_right(sp, (ad, 1 << 32)) - 1
+            hit = sp[i] if i >= 0 and sp[i][0] <= ad < sp[i][1] else None
         if hit:
             inner.setdefault((hit[2], hit[3]), []).append(x)
         else:
