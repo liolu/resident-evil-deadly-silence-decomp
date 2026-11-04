@@ -23,6 +23,7 @@ import base64
 import json
 import os
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -109,25 +110,69 @@ def pipeline_lock(owner: str, root: Path | None = None):
         return
     lock = (root / "build" / "pipeline.lock") if root else LOCK  # one lock per game
     lock.parent.mkdir(parents=True, exist_ok=True)
-    held_by_parent = False
-    if lock.exists():
-        try:
-            info = json.loads(lock.read_text())
-        except ValueError:
-            info = {}
-        pid = int(info.get("pid", 0))
-        if pid in (os.getpid(), os.getppid()) or str(pid) == os.environ.get("PIPELINE_LOCK_PID"):
-            held_by_parent = True
-        elif pid and _alive(pid):
-            raise SystemExit(f"{info.get('owner', 'another tool')} (PID {pid}) is already running: wait for it to "
-                             f"finish. If it crashed, delete {lock}.")
+    held_by_parent = _acquire(lock, owner)
     if not held_by_parent:
-        lock.write_text(json.dumps({"pid": os.getpid(), "owner": owner}))
         os.environ["PIPELINE_LOCK_PID"] = str(os.getpid())  # inherited by the tools this process starts
         if root is None:
             recover(holding_lock=True)
     try:
         yield
     finally:
-        if not held_by_parent:
-            lock.unlink(missing_ok=True)
+        if not held_by_parent and (lock_owner(lock) or {}).get("pid") == os.getpid():
+            lock.unlink(missing_ok=True)  # never someone else's lock
+
+
+def lock_owner(lock: Path = LOCK) -> dict | None:
+    """{"pid", "owner"} of the lock file, None when there is none or it cannot be read (being written)."""
+    try:
+        info = json.loads(lock.read_text())
+        return info if isinstance(info, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def held(lock: Path = LOCK) -> dict | None:
+    """The owner of the lock when a live process holds it (for the Studio's scheduler), else None."""
+    info = lock_owner(lock)
+    pid = int((info or {}).get("pid", 0) or 0)
+    return info if pid and _alive(pid) else None
+
+
+def _acquire(lock: Path, owner: str) -> bool:
+    """Creates the lock file atomically (O_CREAT | O_EXCL: of two tools starting together only one gets it).
+    Returns True when an ancestor of this process already holds it (nothing created)."""
+    me = json.dumps({"pid": os.getpid(), "owner": owner})
+    for _ in range(100):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            info = lock_owner(lock)
+            if info is None:  # just created by another tool, not written yet; or a broken file left by a crash
+                try:
+                    age = time.time() - lock.stat().st_mtime
+                except OSError:
+                    continue  # removed meanwhile: try again
+                if age < 10:
+                    time.sleep(0.2)
+                    continue
+                lock.unlink(missing_ok=True)
+                continue
+            pid = int(info.get("pid", 0) or 0)
+            if pid in (os.getpid(), os.getppid()) or str(pid) == os.environ.get("PIPELINE_LOCK_PID"):
+                return True
+            if pid and _alive(pid):
+                raise SystemExit(f"{info.get('owner', 'another tool')} (PID {pid}) is already running: wait for it "
+                                 f"to finish. If it crashed, delete {lock}.")
+            lock.unlink(missing_ok=True)  # left by a process that no longer exists
+            continue
+        with os.fdopen(fd, "w") as f:
+            f.write(me)
+        # Two tools that removed the same stale lock at once: the second one may have deleted the first one's new
+        # lock. Whoever no longer reads its own pid backs off
+        time.sleep(0.05)
+        info = lock_owner(lock)
+        if (info or {}).get("pid") != os.getpid():
+            raise SystemExit(f"{(info or {}).get('owner', 'another tool')} took the pipeline lock at the same time: "
+                             "try again later.")
+        return False
+    raise SystemExit(f"Cannot take {lock}: delete it if no tool is running.")
