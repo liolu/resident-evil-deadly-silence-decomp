@@ -15,6 +15,7 @@ After the build:
   - the banner icon (banner_fix.py: palettes with the same colour twice);
   - empty files: Nintendo's tool gave them another address than dsd does (Tom and Jerry Tales: structor3/adf/...).
     They hold no data, so their FAT entry takes the original address back;
+  - the cartridge size: dsd picks the smallest chip, the original may be bigger and padded with 0xFF;
   - the recorded secure-area CRC, when no BIOS was supplied and the secure area
     is unchanged. dsd otherwise writes zero; the header CRC is then recomputed.
 """
@@ -162,6 +163,20 @@ def secure_area_crc_fix(orig: bytes, rom: bytearray) -> bool:
     return True
 
 
+def capacity_fix(orig: bytes, rom: bytearray) -> bool:
+    """dsd picks the smallest cartridge that holds the files (header byte 0x14) and writes no padding after them;
+    Nintendo's tool may have chosen a bigger chip and filled the rest with 0xFF (Sudokumaniacs: 8 MB, dsd 4 MB).
+    When the original ends with nothing but 0xFF after our ROM's length, its capacity byte and padding come back."""
+    if len(orig) <= len(rom) or orig[0x14] <= rom[0x14]:
+        return False
+    if orig[len(rom):].strip(b"\xff"):
+        return False
+    rom[0x14] = orig[0x14]
+    rom.extend(b"\xff" * (len(orig) - len(rom)))
+    struct.pack_into("<H", rom, 0x15e, _common.crc16(rom[:0x15e]))
+    return True
+
+
 def main():
     cmd = sys.argv[1:]
     if "--config" in cmd:
@@ -186,7 +201,10 @@ def main():
             c = not has_bios and secure_area_crc_fix(orig, rom)
             if c:
                 print("rom_build: preserved recorded secure-area CRC for unchanged secure area; recomputed header CRC")
-            if n > 0 or e or c:
+            p = capacity_fix(orig, rom)
+            if p:
+                print(f"rom_build: cartridge size and 0xFF padding of the original kept ({len(orig) >> 20} MB)")
+            if n > 0 or e or c or p:
                 rom_path.write_bytes(rom)
 
 
