@@ -32,6 +32,14 @@ src/auto/func_02000b48.c:
     complete
     .text       start:0x02000b48 end:0x02000b4c
 
+src/nitro/init/module_params.c:
+    complete
+    .text       start:0x02000b4c end:0x02000b70
+
+src/nitro/init/version_backup.c:
+    complete
+    .text       start:0x02000b70 end:0x02000b88
+
 src/auto/func_0200182c.c:
     complete
     .text       start:0x0200182c end:0x02001830
